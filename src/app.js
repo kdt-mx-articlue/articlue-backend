@@ -10,6 +10,7 @@ const { initOraclePool, closeOraclePool } = require("./config/db");
 const corsMiddleware = require("./config/cors");
 
 // 라우팅포인트 load
+const testRoutes = require("./routes/test.route.js");
 const authRoutes = require("./routes/auth.route.js");
 const memberRoutes = require("./routes/member.route.js");
 // const githubRoutes = require("./routes/github.route.js");
@@ -30,6 +31,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/auth", authRoutes);
 // app.use("/api/member", memberRoutes);
 // app.use("/api/github", githubRoutes);
+app.use("/api/test", testRoutes);
 
 // 서버 실행
 async function startServer() {
