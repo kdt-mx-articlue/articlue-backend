@@ -6,11 +6,7 @@ const authService = require("../services/auth.service");
 async function signup(req, res) {
 
     try {
-
-        const result =
-            await authService.signup(
-                req.body
-            );
+        const result = await authService.signup(req.body);
 
         return res.status(201).json({
             success: true,
@@ -41,22 +37,14 @@ async function signup(req, res) {
 
 }
 
-module.exports = {
-    signup
-};
-
-
 /**
  * 로그인
  */
 async function login(req, res) {
 
     try {
-
-        const result =
-            await authService.login(
-                req.body
-            );
+        console.log("바디", req.body);
+        const result = await authService.login(req.body);
 
         return res.status(200).json({
             success: true,
@@ -74,7 +62,6 @@ async function login(req, res) {
 
         // 사용자 입력 오류
         if (
-
             error.message === "아이디를 입력하세요." ||
             error.message === "비밀번호를 입력하세요." ||
             error.message === "아이디 또는 비밀번호가 올바르지 않습니다."
@@ -98,6 +85,4 @@ async function login(req, res) {
 
 }
 
-module.exports = {
-    login
-};
+module.exports = { signup, login };

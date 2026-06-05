@@ -6,8 +6,7 @@ const { getConnection } = require("../config/db");
 async function signup(member, conn) {
 
     const sql = `
-        INSERT INTO MEMBER
-        (
+        INSERT INTO MEMBER(
             MEMBER_ID,
             LOGIN_ID,
             PASSWORD,
@@ -17,8 +16,7 @@ async function signup(member, conn) {
             CREATE_AT,
             UPDATE_AT
         )
-        VALUES
-        (
+        VALUES(
             SEQ_MEMBER.NEXTVAL,
             :loginId,
             :password,
@@ -27,8 +25,7 @@ async function signup(member, conn) {
             'COMMON',
             SYSDATE,
             NULL
-        )
-    `;
+        )`;
 
     return await conn.execute(
         sql,
@@ -54,10 +51,7 @@ async function findByLoginId(loginId, conn) {
         WHERE LOGIN_ID = :loginId
     `;
 
-    const result = await conn.execute(
-        sql,
-        { loginId }
-    );
+    const result = await conn.execute(sql, { loginId });
 
     return result.rows;
 }
@@ -75,10 +69,7 @@ async function findByEmail(email, conn) {
         WHERE EMAIL = :email
     `;
 
-    const result = await conn.execute(
-        sql,
-        { email }
-    );
+    const result = await conn.execute(sql, { email });
 
     return result.rows;
 }
@@ -86,22 +77,19 @@ async function findByEmail(email, conn) {
 /**
  * 로그인
  */
-async function findByLoginId(loginId, conn) {
+async function login(loginId, conn) {
 
     const sql = `
         SELECT
-            MEMBER_ID AS memberId,
-            LOGIN_ID AS loginId,
-            PASSWORD AS password,
-            USER_TYPE AS userType
+            MEMBER_ID AS "memberId",
+            LOGIN_ID AS "loginId",
+            PASSWORD AS "password",
+            USER_TYPE AS "userType"
         FROM MEMBER
         WHERE LOGIN_ID = :loginId
     `;
 
-    const result = await conn.execute(
-        sql,
-        { loginId }
-    );
+    const result = await conn.execute(sql, { loginId });
 
     return result.rows[0];
 }
