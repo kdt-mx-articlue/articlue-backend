@@ -17,19 +17,10 @@ async function signup(req, res) {
 
         console.error(error);
 
-        // 클라이언트 오류
-        if (error.statusCode) {
-            return res.status(error.statusCode).json({
-                success: false,
-                message: error.message
-            });
-
-        }
-
-        // 서버 오류
-        return res.status(500).json({
+        // 오류
+        return res.status(error.statusCode).json({
             success: false,
-            message: "서버 내부 오류가 발생했습니다."
+            message: error.statusCode ? error.message : "서버 내부 오류가 발생했습니다."
         });
 
     }
@@ -42,10 +33,14 @@ async function signup(req, res) {
 async function login(req, res) {
 
     try {
-        console.log("바디", req.body);
-        const result = await authService.login(req.body);
+        const member = {
+            "memberId":req.body.memberId,
+            "memberPw":req.body.password
+        }
 
-        return res.status(200).json({
+        const result = await authService.login(member);
+
+        return res.status(error.statusCode).json({
             success: true,
             message: result.message,
             data: {
@@ -56,24 +51,14 @@ async function login(req, res) {
         });
 
     } catch (error) {
-
+        
         console.error(error);
 
-        // 사용자 입력 오류
-        if (error.statusCode) {
-            return res.status(error.statusCode).json({
-                success: false,
-                message: error.message
-            });
-
-        }
-
         // 서버 오류
-        return res.status(500).json({
+        return res.status(error.statusCode).json({
             success: false,
-            message: "서버 내부 오류가 발생했습니다."
+            message: error.statusCode ? error.message : "서버 내부 오류가 발생했습니다."
         });
-
     }
 
 }
