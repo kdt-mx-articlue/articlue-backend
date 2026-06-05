@@ -1,0 +1,43 @@
+# Node modules
+node_modules/
+
+# 환경 변수
+.env
+!.env.example
+
+# 로그
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# 데이터베이스 파일 (혹시 로컬 sqlite 등)
+*.db
+*.sqlite
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 캐시
+.cache/
+dist/
+build/
+
+# 인증 관련
+*.pem
+*.key
+
+# 임시 파일
+tmp/
+temp/
+
+# 기타
+coverage/
