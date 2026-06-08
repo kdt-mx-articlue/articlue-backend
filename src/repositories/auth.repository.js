@@ -25,17 +25,25 @@ async function signup(member, conn) {
             'COMMON',
             SYSDATE,
             NULL
-        )`;
+        )
+        RETURNING MEMBER_ID INTO :memberId`;
 
-    return await conn.execute(
+    const result = await conn.execute(
         sql,
         {
             loginId: member.loginId,
             password: member.password,
             email: member.email,
-            nickname: member.nickname
+            nickname: member.nickname,
+
+            memberId: {
+                dir: oracledb.BIND_OUT,
+                type: oracledb.NUMBER
+            }
         }
     );
+
+    return result.outBinds.memberId[0];
 }
 
 /**
