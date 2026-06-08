@@ -30,13 +30,14 @@ async function signup(member) {
         if (existLoginId.length > 0) { throw createError("이미 사용중인 아이디입니다.", 409); }
 
         // 4. 이메일 중복 검사
-        const existEmail =
-            await authRepository.findByEmail(member.email, conn);
+        const existEmail = await authRepository.findByEmail(member.email, conn);
 
         if (existEmail.length > 0) { throw createError("이미 사용중인 이메일입니다.", 409); }
 
         // 5. 회원 저장
-        await authRepository.signup(member, conn);
+        const memberId = await authRepository.signup(member, conn);
+        // 5-1. 회원 프로필 저장
+        await memberProfileRepository.create( memberId, member, conn );
 
         // 6. 저장 확정
         await conn.commit();
