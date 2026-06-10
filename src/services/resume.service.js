@@ -1,11 +1,11 @@
 const { getConnection } = require("../config/db");
-const resumeRepository = require("../repositories/resume.respository");
+const resumeRepository = require("../repositories/resume.repository");
 const { createError } = require("../utils/error.util");
 
 /**
  * 이력서 등록
  */
-async function createResume(resume, conn) {
+async function createResume(resume) {
 
     const conn = await getConnection();
 
