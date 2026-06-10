@@ -1,4 +1,4 @@
-const { getConnection } = require("../config/db");
+const oracledb = require("oracledb");
 
 /**
  * 회원가입
@@ -102,9 +102,4 @@ async function login(loginId, conn) {
     return result.rows[0];
 }
 
-module.exports = {
-    signup,
-    findByLoginId,
-    findByEmail,
-    login
-};
+module.exports = { signup, findByLoginId, findByEmail, login };

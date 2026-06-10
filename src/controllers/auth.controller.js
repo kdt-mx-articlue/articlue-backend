@@ -34,13 +34,13 @@ async function login(req, res) {
 
     try {
         const member = {
-            "memberId":req.body.memberId,
-            "memberPw":req.body.password
+            "loginId":req.body.loginId,
+            "password":req.body.password
         }
 
         const result = await authService.login(member);
 
-        return res.status(error.statusCode).json({
+        return res.status(200).json({
             success: true,
             message: result.message,
             data: {
@@ -55,7 +55,7 @@ async function login(req, res) {
         console.error(error);
 
         // 서버 오류
-        return res.status(error.statusCode).json({
+        return res.status(error.statusCode || 500).json({
             success: false,
             message: error.statusCode ? error.message : "서버 내부 오류가 발생했습니다."
         });
