@@ -1,26 +1,75 @@
 require("dotenv").config();
 
+// 1. 프레임워크 load
 const express = require("express");
+const swaggerUi = require("swagger-ui-express");
+
+// 2. 환경설정 load
+const env = require("./config/env.js");
+const { initOraclePool, closeOraclePool } = require("./config/db");
 const corsMiddleware = require("./config/cors");
+
+// 라우팅포인트 load
+const testRoutes = require("./routes/test.route.js");
+const authRoutes = require("./routes/auth.route.js");
+const memberRoutes = require("./routes/member.route.js");
+// const githubRoutes = require("./routes/github.route.js");
+
 
 const app = express();
 
-// CORS
 app.use(corsMiddleware);
 
 // JSON Body Parser
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-const authRoutes = require('./routes/auth.route');
+// Swagger API 문서
+// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
-app.use('/api/auth', authRoutes);
-app.use('/api/member', authRoutes);
+// RESTful API Router
+app.use("/api/auth", authRoutes);
+// app.use("/api/member", memberRoutes);
+// app.use("/api/github", githubRoutes);
+app.use("/api/test", testRoutes);
 
+// 서버 실행
+async function startServer() {
+    try {
+        await initOraclePool();
 
-app.get("/", (req, res) => {
-    res.json({
-        message: "Server Running",
-    });
+        app.listen(env.port, () => {
+            console.log(`아티클루 백엔드가 http://localhost:${env.port} 에서 정상 작동 중입니다.`);
+            console.log(`웹 명세서(Swagger) 주소: http://localhost:${env.port}/api-docs`);
+        });
+
+    } catch (error) {
+        console.error("서버 시작 실패:", error);
+        process.exit(1);
+    }
+}
+
+async function shutdown(signal) {
+    console.log(`${signal} received. Closing server resources...`);
+
+    await closeOraclePool();
+
+    process.exit(0);
+}
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled Rejection:", reason);
 });
 
-module.exports = app;
+process.on("uncaughtException", async (error) => {
+    console.error("Uncaught Exception:", error);
+
+    await closeOraclePool();
+
+    process.exit(1);
+});
+
+startServer();
