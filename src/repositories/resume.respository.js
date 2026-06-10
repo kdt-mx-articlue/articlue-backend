@@ -1,4 +1,4 @@
-const { getConnection } = require("../config/db");
+const { getConnection, oracledb } = require("../config/db");
 
 /**
  * 1. 이력서 생성
@@ -29,18 +29,26 @@ async function createResume(resume, conn) {
             'N',
             SYSDATE,
             SYSDATE
-        )
+        )   
+        RETURNING RESUME_ID INTO :resumeId
     `;
 
-    return await conn.execute(
+    const result = await conn.execute(
         sql,
         {
             memberId: resume.memberId,
             resumeTitle: resume.resumeTitle,
             desiredJob: resume.desiredJob,
-            introduction: resume.introduction
+            introduction: resume.introduction,
+
+            resumeId: {
+                dir: oracledb.BIND_OUT, // BIND_OUT
+                type: oracledb.NUMBER  // NUMBER
+            }
         }
     );
+
+    return result.outBinds.resumeId[0];
 }
 
 /**
