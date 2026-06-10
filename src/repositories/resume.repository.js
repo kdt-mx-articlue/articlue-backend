@@ -203,12 +203,19 @@ async function createCoverLetter(
         RETURNING COVER_LETTER_ID INTO :coverLetterId
     `;
 
-    return await conn.execute(
+    const result = await conn.execute(
         sql,
         {
-            resumeId
+            resumeId,
+
+            coverLetterId: {
+                dir: oracledb.BIND_OUT,
+                type: oracledb.NUMBER
+            }
         }
     );
+    
+    return result.outBinds.coverLetterId[0];
 }
 
 /**
