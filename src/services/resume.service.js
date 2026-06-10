@@ -5,7 +5,7 @@ const { createError } = require("../utils/error.util");
 /**
  * 이력서 등록
  */
-async function createResume(resume) {
+async function createResume(resume, conn) {
 
     const conn = await getConnection();
 

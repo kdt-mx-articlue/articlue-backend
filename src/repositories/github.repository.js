@@ -342,15 +342,92 @@ async function insertGithubRepoCommitDaily(conn, row) {
     return result.outBinds.github_repo_commit_daily_id[0];
 }
 
-module.exports = {
-    findActiveTechStackMap,
+// 3개의 저장소 가져오기.
+async function findTopRepositories(memberId,conn){
+    const sql = `
+        SELECT
+            gr.GITHUB_REPOSITORY_ID AS githubRepositoryId,
+            gr.NAME AS name,
+            gr.FULL_NAME AS fullName,
+            gr.HTML_URL AS htmlUrl,
+            gr.DESCRIPTION AS description,
+            MAX(gcd.COMMIT_DATE) AS lastCommitDate
+        FROM GITHUB_ACCOUNT ga
+        INNER JOIN GITHUB_REPOSITORY gr
+            ON ga.GITHUB_ACCOUNT_ID = gr.GITHUB_ACCOUNT_ID
+        INNER JOIN GITHUB_REPO_COMMIT_DAILY gcd
+            ON gr.GITHUB_REPOSITORY_ID = gcd.GITHUB_REPOSITORY_ID
+        WHERE ga.MEMBER_ID = :memberId
+        GROUP BY
+            gr.GITHUB_REPOSITORY_ID,
+            gr.NAME,
+            gr.FULL_NAME,
+            gr.HTML_URL,
+            gr.DESCRIPTION
+        ORDER BY MAX(gcd.COMMIT_DATE) DESC
+        FETCH FIRST 3 ROWS ONLY
+    `;
 
+    const result = await conn.execute(
+        sql,
+        {
+            memberId
+        }
+    );
+
+    return result.rows;
+}
+
+// 전체 저장소 가져오기.
+async function findAllRepositories(memberId,conn){
+    const sql = `
+        SELECT
+            gr.GITHUB_REPOSITORY_ID AS githubRepositoryId,
+            gr.NAME AS name,
+            gr.FULL_NAME AS fullName,
+            gr.HTML_URL AS htmlUrl,
+            gr.DESCRIPTION AS description,
+            MAX(gcd.COMMIT_DATE) AS lastCommitDate
+        FROM GITHUB_ACCOUNT ga
+        INNER JOIN GITHUB_REPOSITORY gr
+            ON ga.GITHUB_ACCOUNT_ID = gr.GITHUB_ACCOUNT_ID
+        LEFT JOIN GITHUB_REPO_COMMIT_DAILY gcd
+            ON gr.GITHUB_REPOSITORY_ID = gcd.GITHUB_REPOSITORY_ID
+        WHERE ga.MEMBER_ID = :memberId
+        GROUP BY
+            gr.GITHUB_REPOSITORY_ID,
+            gr.NAME,
+            gr.FULL_NAME,
+            gr.HTML_URL,
+            gr.DESCRIPTION
+        ORDER BY
+            MAX(gcd.COMMIT_DATE) DESC NULLS LAST
+    `;
+
+    const result = await conn.execute(
+        sql,
+        {
+            memberId
+        }
+    );
+
+    return result.rows;
+}
+
+module.exports = {
+    // 깃허브 저장소 가져오기.
+    findActiveTechStackMap,
+    findTopRepositories,
+
+    // GitHub API 요청을 통한 기능 
     upsertGithubAccount,
     upsertGithubRepository,
 
+    // 기술스택 관련 모듈
     deleteGithubRepoTechStacks,
     insertGithubRepoTechStack,
 
     deleteGithubRepoCommitDaily,
     insertGithubRepoCommitDaily,
 };
+
