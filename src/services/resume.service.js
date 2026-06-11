@@ -340,6 +340,7 @@ async function createResume(resume) {
             careers: 0,
             certificates: 0,
             coverLetters: 0,
+            coverLetterItems: 0,
             portfolioFiles: 0,
             techStacks: 0,
             githubRepositories: 0,
@@ -415,19 +416,34 @@ async function createResume(resume) {
         for (const coverLetter of coverLetters) {
             const normalizedCoverLetter = validateCoverLetter(coverLetter);
 
-            await resumeRepository.createCoverLetter(
-                normalizedCoverLetter,
+            const coverLetterId = await resumeRepository.createCoverLetter(
                 resumeId,
                 conn
             );
 
+            if (!coverLetterId) {
+                throw createError("자기소개서 등록 후 자기소개서 번호를 확인할 수 없습니다.", 500);
+            }
+
             insertCount.coverLetters++;
+
+            /*
+            * 실제 자기소개서 문항 제목/본문은 COVER_LETTER_ITEM에 저장한다.
+            */
+            for (const item of normalizedCoverLetter.items) {
+                await resumeRepository.createCoverLetterItem(
+                    item,
+                    coverLetterId,
+                    conn
+                );
+                insertCount.coverLetterItems++;
+            }
         }
 
         for (const portfolioFile of portfolioFiles) {
             validatePortfolioFile(portfolioFile);
 
-            await resumeRepository.createPortfolioFile(
+            await resumeRepository.createPortfolio(
                 portfolioFile,
                 resumeId,
                 conn
