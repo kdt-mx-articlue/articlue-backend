@@ -5,4 +5,6 @@ const router = express.Router();
 
 router.post("/", resumeController.createResume);
 
+router.get("/:resumeId", resumeController.getResumeDetail);
+
 module.exports = router;
