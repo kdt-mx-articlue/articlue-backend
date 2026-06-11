@@ -15,7 +15,7 @@ async function createResume(req, res) {
         console.error(error);
 
         // 서버 오류
-        return res.status(error.statusCode).json({
+        return res.status(error.statusCode || 500).json({
             success: false,
             message: error.statusCode ? error.message : "서버 내부 오류가 발생했습니다."
         });
