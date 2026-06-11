@@ -414,118 +414,15 @@ async function storage({
     let conn;
 
     try {
-        if (!memberId) {
-            throw createError("memberId 또는 member_id가 필요합니다.", 400);
-        }
-
-        const repoLimit = toNumber(limitRepoCount, 5);
-        const commitLimit = toNumber(commitLimitPerRepo, 30);
-
-        const githubApi = createGithubApiBySession(githubSession);
-
         conn = await getConnection();
 
-        const githubUser = await githubApi.getUser();
-
-        const githubAccountId = await githubRepository.upsertGithubAccount(conn, {
-            member_id: Number(memberId),
-            id: githubUser.id,
-            login: githubUser.login,
-            html_url: githubUser.html_url,
+        const result = await saveGithubDataByResumeTransaction({
+            conn,
+            githubSession,
+            memberId,
+            limitRepoCount,
+            commitLimitPerRepo,
         });
-
-        const techStackMap = await githubRepository.findActiveTechStackMap(conn);
-
-        const repositories = await githubApi.getUserRepositories({
-            sort: "updated",
-            direction: "desc",
-        });
-
-        const selectedRepositories = repositories.slice(0, repoLimit);
-
-        let savedRepositoryCount = 0;
-        let savedTechStackCount = 0;
-        let savedCommitDailyCount = 0;
-
-        for (const repo of selectedRepositories) {
-            const parsed = parseFullName(repo.full_name);
-
-            if (!parsed) {
-                continue;
-            }
-
-            const githubRepositoryId =
-                await githubRepository.upsertGithubRepository(conn, {
-                    github_account_id: githubAccountId,
-                    id: repo.id,
-                    name: repo.name,
-                    full_name: repo.full_name,
-                    html_url: repo.html_url,
-                    description: repo.description,
-                    fork: repo.fork ? 1 : 0,
-                    archived: repo.archived ? 1 : 0,
-                    default_branch: repo.default_branch,
-                    created_at: repo.created_at ? new Date(repo.created_at) : null,
-                    updated_at: repo.updated_at ? new Date(repo.updated_at) : null,
-                    pushed_at: repo.pushed_at ? new Date(repo.pushed_at) : null,
-                });
-
-            savedRepositoryCount++;
-
-            const languages = await githubApi.getRepositoryLanguages(
-                parsed.owner,
-                parsed.repoName
-            );
-
-            const languageRatios = calculateLanguageRatio(languages);
-
-            await githubRepository.deleteGithubRepoTechStacks(
-                conn,
-                githubRepositoryId
-            );
-
-            for (const language of languageRatios) {
-                const techStackId =
-                    techStackMap[String(language.language_name).toLowerCase()];
-
-                if (!techStackId) {
-                    continue;
-                }
-
-                await githubRepository.insertGithubRepoTechStack(conn, {
-                    github_repository_id: githubRepositoryId,
-                    tech_stack_id: techStackId,
-                    language_name: language.language_name,
-                    usage_ratio: language.usage_ratio,
-                });
-
-                savedTechStackCount++;
-            }
-
-            const commits = await githubApi.getRepositoryCommits(
-                parsed.owner,
-                parsed.repoName,
-                {},
-                commitLimit
-            );
-
-            const commitDailyList = groupCommitsByDate(commits);
-
-            await githubRepository.deleteGithubRepoCommitDaily(
-                conn,
-                githubRepositoryId
-            );
-
-            for (const commitDaily of commitDailyList) {
-                await githubRepository.insertGithubRepoCommitDaily(conn, {
-                    github_repository_id: githubRepositoryId,
-                    commit_date: new Date(commitDaily.commit_date),
-                    commit_count: commitDaily.commit_count,
-                });
-
-                savedCommitDailyCount++;
-            }
-        }
 
         await conn.commit();
 
@@ -534,21 +431,7 @@ async function storage({
             data: {
                 memberId: Number(memberId),
                 member_id: Number(memberId),
-
-                githubAccountId,
-                github_account_id: githubAccountId,
-
-                repositoryTotalCount: repositories.length,
-                repository_total_count: repositories.length,
-
-                savedRepositoryCount,
-                saved_repository_count: savedRepositoryCount,
-
-                savedTechStackCount,
-                saved_tech_stack_count: savedTechStackCount,
-
-                savedCommitDailyCount,
-                saved_commit_daily_count: savedCommitDailyCount,
+                ...result,
             },
         };
 
@@ -566,6 +449,174 @@ async function storage({
     }
 }
 
+/**
+ * 이력서 등록 트랜잭션 안에서 사용할 GitHub 정보 저장 함수
+ *
+ * 주의:
+ * - 여기서는 getConnection(), commit(), rollback(), close()를 하지 않는다.
+ * - resume.service.js의 같은 conn을 받아서 사용한다.
+ */
+async function saveGithubDataByResumeTransaction({
+    conn,
+    githubSession,
+    memberId,
+    limitRepoCount,
+    commitLimitPerRepo,
+}) {
+    if (!conn) {
+        throw createError("DB 연결 정보가 없습니다.", 500);
+    }
+
+    if (!githubSession) {
+        throw createError("GitHub 세션 정보가 없습니다.", 400);
+    }
+
+    if (!memberId) {
+        throw createError("memberId 또는 member_id가 필요합니다.", 400);
+    }
+
+    const repoLimit = toNumber(limitRepoCount, 5);
+    const commitLimit = toNumber(commitLimitPerRepo, 30);
+
+    const githubApi = createGithubApiBySession(githubSession);
+
+    const githubUser = await githubApi.getUser();
+
+    const githubAccountId = await githubRepository.upsertGithubAccount(conn, {
+        member_id: Number(memberId),
+        id: githubUser.id,
+        login: githubUser.login,
+        html_url: githubUser.html_url,
+    });
+
+    const techStackMap = await githubRepository.findActiveTechStackMap(conn);
+
+    const repositories = await githubApi.getUserRepositories({
+        sort: "updated",
+        direction: "desc",
+    });
+
+    const selectedRepositories = repositories.slice(0, repoLimit);
+
+    let savedRepositoryCount = 0;
+    let savedTechStackCount = 0;
+    let savedCommitDailyCount = 0;
+
+    const savedRepositories = [];
+
+    for (const repo of selectedRepositories) {
+        const parsed = parseFullName(repo.full_name);
+
+        if (!parsed) {
+            continue;
+        }
+
+        const githubRepositoryId =
+            await githubRepository.upsertGithubRepository(conn, {
+                github_account_id: githubAccountId,
+                id: repo.id,
+                name: repo.name,
+                full_name: repo.full_name,
+                html_url: repo.html_url,
+                description: repo.description,
+                fork: repo.fork ? 1 : 0,
+                archived: repo.archived ? 1 : 0,
+                default_branch: repo.default_branch,
+                created_at: repo.created_at ? new Date(repo.created_at) : null,
+                updated_at: repo.updated_at ? new Date(repo.updated_at) : null,
+                pushed_at: repo.pushed_at ? new Date(repo.pushed_at) : null,
+            });
+
+        savedRepositoryCount++;
+
+        savedRepositories.push({
+            githubRepositoryId,
+            github_repository_id: githubRepositoryId,
+            externalId: repo.id,
+            external_id: repo.id,
+            name: repo.name,
+            fullName: repo.full_name,
+            full_name: repo.full_name,
+            htmlUrl: repo.html_url,
+            html_url: repo.html_url,
+        });
+
+        const languages = await githubApi.getRepositoryLanguages(
+            parsed.owner,
+            parsed.repoName
+        );
+
+        const languageRatios = calculateLanguageRatio(languages);
+
+        await githubRepository.deleteGithubRepoTechStacks(
+            conn,
+            githubRepositoryId
+        );
+
+        for (const language of languageRatios) {
+            const techStackId =
+                techStackMap[String(language.language_name).toLowerCase()];
+
+            if (!techStackId) {
+                continue;
+            }
+
+            await githubRepository.insertGithubRepoTechStack(conn, {
+                github_repository_id: githubRepositoryId,
+                tech_stack_id: techStackId,
+                language_name: language.language_name,
+                usage_ratio: language.usage_ratio,
+            });
+
+            savedTechStackCount++;
+        }
+
+        const commits = await githubApi.getRepositoryCommits(
+            parsed.owner,
+            parsed.repoName,
+            {},
+            commitLimit
+        );
+
+        const commitDailyList = groupCommitsByDate(commits);
+
+        await githubRepository.deleteGithubRepoCommitDaily(
+            conn,
+            githubRepositoryId
+        );
+
+        for (const commitDaily of commitDailyList) {
+            await githubRepository.insertGithubRepoCommitDaily(conn, {
+                github_repository_id: githubRepositoryId,
+                commit_date: new Date(commitDaily.commit_date),
+                commit_count: commitDaily.commit_count,
+            });
+
+            savedCommitDailyCount++;
+        }
+    }
+
+    return {
+        githubAccountId,
+        github_account_id: githubAccountId,
+
+        repositoryTotalCount: repositories.length,
+        repository_total_count: repositories.length,
+
+        savedRepositoryCount,
+        saved_repository_count: savedRepositoryCount,
+
+        savedTechStackCount,
+        saved_tech_stack_count: savedTechStackCount,
+
+        savedCommitDailyCount,
+        saved_commit_daily_count: savedCommitDailyCount,
+
+        savedRepositories,
+        saved_repositories: savedRepositories,
+    };
+}
+
 module.exports = {
     login,
     issueToken,
@@ -574,4 +625,7 @@ module.exports = {
     getRepos,
     getDetailInfo,
     storage,
+    saveGithubDataByResumeTransaction,
 };
+
+

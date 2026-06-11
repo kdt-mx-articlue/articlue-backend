@@ -13,6 +13,7 @@ const corsMiddleware = require("./config/cors");
 const testRoutes = require("./routes/test.route.js");
 const authRoutes = require("./routes/auth.route.js");
 const memberRoutes = require("./routes/member.route.js");
+const resumeRoutes = require("./routes/resume.route.js")
 // const githubRoutes = require("./routes/github.route.js");
 
 
@@ -29,6 +30,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // RESTful API Router
 app.use("/api/auth", authRoutes);
+app.use("/api/resumes", resumeRoutes);
 // app.use("/api/member", memberRoutes);
 // app.use("/api/github", githubRoutes);
 app.use("/api/test", testRoutes);

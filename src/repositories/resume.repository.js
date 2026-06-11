@@ -1,4 +1,4 @@
-const { getConnection, oracledb } = require("../config/db");
+const { oracledb } = require("../config/db");
 
 /**
  * 1. 이력서 생성
@@ -49,6 +49,39 @@ async function createResume(resume, conn) {
     );
 
     return result.outBinds.resumeId[0];
+}
+
+/**
+ * 희망지역 생성
+ */
+async function createDesiredLocation(
+    location,
+    resumeId,
+    conn
+) {
+
+    const sql = `
+        INSERT INTO RESUME_DESIRED_LOCATION
+        (
+            DESIRED_LOCATION_ID,
+            RESUME_ID,
+            LOCATION_NAME
+        )
+        VALUES
+        (
+            SEQ_RESUME_LOCATION.NEXTVAL,
+            :resumeId,
+            :locationName
+        )
+    `;
+
+    return await conn.execute(
+        sql,
+        {
+            resumeId,
+            locationName: location.locationName
+        }
+    );
 }
 
 /**
@@ -148,7 +181,6 @@ async function createExperience(
  * 4. 자기소개서생성
  */
 async function createCoverLetter(
-    coverLetter,
     resumeId,
     conn
 ) {
@@ -168,12 +200,98 @@ async function createCoverLetter(
             SYSDATE,
             SYSDATE
         )
+        RETURNING COVER_LETTER_ID INTO :coverLetterId
+    `;
+
+    const result = await conn.execute(
+        sql,
+        {
+            resumeId,
+
+            coverLetterId: {
+                dir: oracledb.BIND_OUT,
+                type: oracledb.NUMBER
+            }
+        }
+    );
+    
+    return result.outBinds.coverLetterId[0];
+}
+
+/**
+ * 자기소개서 문항 생성
+ */
+async function createCoverLetterItem(
+    item,
+    coverLetterId,
+    conn
+) {
+
+    const sql = `
+        INSERT INTO COVER_LETTER_ITEM
+        (
+            COVER_LETTER_ITEM_ID,
+            COVER_LETTER_ID,
+            QUESTION_ORDER,
+            SUB_TITLE,
+            CONTENT,
+            CREATE_AT,
+            UPDATE_AT
+        )
+        VALUES
+        (
+            SEQ_COVER_LETTER_ITEM.NEXTVAL,
+            :coverLetterId,
+            :questionOrder,
+            :subTitle,
+            :content,
+            SYSDATE,
+            SYSDATE
+        )
     `;
 
     return await conn.execute(
         sql,
         {
-            resumeId
+            coverLetterId,
+            questionOrder: item.questionOrder,
+            subTitle: item.subTitle,
+            content: item.content
+        }
+    );
+}
+
+/**
+ * 기술스택 생성
+ */
+async function createResumeTechStack(
+    tech,
+    resumeId,
+    conn
+) {
+
+    const sql = `
+        INSERT INTO RESUME_TECH_STACK
+        (
+            RESUME_TECH_ID,
+            RESUME_ID,
+            TECH_CATEGORY_CODE,
+            CREATE_AT
+        )
+        VALUES
+        (
+            SEQ_RESUME_TECH_STACK.NEXTVAL,
+            :resumeId,
+            :techCategoryCode,
+            SYSDATE
+        )
+    `;
+
+    return await conn.execute(
+        sql,
+        {
+            resumeId,
+            techCategoryCode: tech.techCategoryCode
         }
     );
 }
@@ -317,10 +435,13 @@ async function createCareer(
 
 module.exports = {
     createResume,
+    createDesiredLocation,
     createEducation,
     createExperience,
+    createCareer,
     createCoverLetter,
+    createCoverLetterItem,
+    createResumeTechStack,
     createPortfolio,
-    createCertificate,
-    createCareer
+    createCertificate
 };
