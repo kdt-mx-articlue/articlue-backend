@@ -6,16 +6,12 @@ const {
     saveGithubDataByResumeTransaction,
 } = require("./github.service");
 
-/**
- * 빈 값 검사
- */
+// 빈 값 검사
 function isBlank(value) {
     return value === undefined || value === null || String(value).trim() === "";
 }
 
-/**
- * 배열 변환 및 검증
- */
+// 배열 변환 및 검증
 function toArray(value, fieldName) {
     if (value === undefined || value === null) {
         return [];
@@ -28,18 +24,14 @@ function toArray(value, fieldName) {
     return value;
 }
 
-/**
- * 필수값 검사
- */
+// 필수값 검사
 function requireValue(target, fieldName, message) {
     if (!target || isBlank(target[fieldName])) {
         throw createError(message, 400);
     }
 }
 
-/**
- * 여러 필드 중 하나 이상 필수 검사
- */
+// 여러 필드 중 하나 이상 필수 검사
 function requireAtLeastOne(target, fieldNames, message) {
     if (!target) {
         throw createError(message, 400);
@@ -52,9 +44,7 @@ function requireAtLeastOne(target, fieldNames, message) {
     }
 }
 
-/**
- * 여러 필드 중 첫 번째 유효값 반환
- */
+// 여러 필드 중 첫 번째 유효값 반환
 function getFirstValue(target, fieldNames) {
     if (!target) {
         return null;
@@ -67,6 +57,17 @@ function getFirstValue(target, fieldNames) {
     }
 
     return null;
+}
+
+// 숫자형 이력서 ID 검증
+function parseResumeId(value) {
+    const resumeId = Number(value);
+
+    if (!Number.isInteger(resumeId) || resumeId <= 0) {
+        throw createError("이력서 번호가 올바르지 않습니다.", 400);
+    }
+
+    return resumeId;
 }
 
 /**
@@ -517,6 +518,330 @@ async function createResume(resume) {
     }
 }
 
+/**
+ * 조회 row를 이력서 상세 응답 JSON으로 변환
+ */
+function buildResumeDetail(rows) {
+    const first = rows[0];
+
+    const resume = {
+        resumeId: first.RESUME_ID,
+        memberId: first.MEMBER_ID,
+        resumeTitle: first.RESUME_TITLE,
+        desiredJob: first.DESIRED_JOB,
+        introduction: first.INTRODUCTION,
+        resumeStatus: first.RESUME_STATUS,
+        representativeYn: first.REPRESENTATIVE_YN,
+        createAt: first.RESUME_CREATE_AT,
+        updateAt: first.RESUME_UPDATE_AT,
+
+        member: {
+            loginId: first.LOGIN_ID,
+            email: first.MEMBER_EMAIL,
+            nickname: first.NICKNAME,
+            userType: first.USER_TYPE,
+        },
+
+        profile: first.PROFILE_ID
+            ? {
+                profileId: first.PROFILE_ID,
+                name: first.PROFILE_NAME,
+                phone: first.PHONE,
+                birthDate: first.BIRTH_DATE,
+                address: first.ADDRESS,
+                gender: first.GENDER,
+                militaryStatus: first.MILITARY_STATUS,
+                profileImageUrl: first.PROFILE_IMAGE_URL,
+            }
+            : null,
+
+        desiredLocations: [],
+        educations: [],
+        experiences: [],
+        careers: [],
+        certificates: [],
+        coverLetters: [],
+        portfolios: [],
+        techStacks: [],
+        githubRepositories: [],
+    };
+
+    const desiredLocationMap = new Map();
+    const educationMap = new Map();
+    const experienceMap = new Map();
+    const careerMap = new Map();
+    const certificateMap = new Map();
+    const coverLetterMap = new Map();
+    const portfolioMap = new Map();
+    const resumeTechMap = new Map();
+    const githubRepoMap = new Map();
+
+    for (const row of rows) {
+        if (
+            row.DESIRED_LOCATION_ID &&
+            !desiredLocationMap.has(row.DESIRED_LOCATION_ID)
+        ) {
+            desiredLocationMap.set(row.DESIRED_LOCATION_ID, true);
+
+            resume.desiredLocations.push({
+                desiredLocationId: row.DESIRED_LOCATION_ID,
+                locationName: row.LOCATION_NAME,
+            });
+        }
+
+        if (
+            row.EDUCATION_ID &&
+            !educationMap.has(row.EDUCATION_ID)
+        ) {
+            educationMap.set(row.EDUCATION_ID, true);
+
+            resume.educations.push({
+                educationId: row.EDUCATION_ID,
+                schoolType: row.SCHOOL_TYPE,
+                schoolName: row.SCHOOL_NAME,
+                major: row.MAJOR,
+                graduationStatus: row.GRADUATION_STATUS,
+                gpa: row.GPA,
+                startYm: row.EDUCATION_START_YM,
+                endYm: row.EDUCATION_END_YM,
+            });
+        }
+
+        if (
+            row.EXPERIENCE_ID &&
+            !experienceMap.has(row.EXPERIENCE_ID)
+        ) {
+            experienceMap.set(row.EXPERIENCE_ID, true);
+
+            resume.experiences.push({
+                experienceId: row.EXPERIENCE_ID,
+                experienceType: row.EXPERIENCE_TYPE,
+                experienceName: row.EXPERIENCE_NAME,
+                startYm: row.EXPERIENCE_START_YM,
+                endYm: row.EXPERIENCE_END_YM,
+            });
+        }
+
+        if (
+            row.CAREER_ID &&
+            !careerMap.has(row.CAREER_ID)
+        ) {
+            careerMap.set(row.CAREER_ID, true);
+
+            resume.careers.push({
+                careerId: row.CAREER_ID,
+                companyName: row.CAREER_COMPANY_NAME,
+                department: row.DEPARTMENT,
+                position: row.POSITION,
+                startYm: row.CAREER_START_YM,
+                endYm: row.CAREER_END_YM,
+                mainAchievement: row.MAIN_ACHIEVEMENT,
+            });
+        }
+
+        if (
+            row.CERTIFICATE_ID &&
+            !certificateMap.has(row.CERTIFICATE_ID)
+        ) {
+            certificateMap.set(row.CERTIFICATE_ID, true);
+
+            resume.certificates.push({
+                certificateId: row.CERTIFICATE_ID,
+                certificateName: row.CERTIFICATE_NAME,
+                acquiredYm: row.ACQUIRED_YM,
+                issuer: row.ISSUER,
+            });
+        }
+
+        if (row.COVER_LETTER_ID) {
+            if (!coverLetterMap.has(row.COVER_LETTER_ID)) {
+                const coverLetter = {
+                    coverLetterId: row.COVER_LETTER_ID,
+                    createAt: row.COVER_LETTER_CREATE_AT,
+                    updateAt: row.COVER_LETTER_UPDATE_AT,
+                    items: [],
+                    itemMap: new Map(),
+                };
+
+                coverLetterMap.set(row.COVER_LETTER_ID, coverLetter);
+                resume.coverLetters.push(coverLetter);
+            }
+
+            const coverLetter = coverLetterMap.get(row.COVER_LETTER_ID);
+
+            if (
+                row.COVER_LETTER_ITEM_ID &&
+                !coverLetter.itemMap.has(row.COVER_LETTER_ITEM_ID)
+            ) {
+                coverLetter.itemMap.set(row.COVER_LETTER_ITEM_ID, true);
+
+                coverLetter.items.push({
+                    coverLetterItemId: row.COVER_LETTER_ITEM_ID,
+                    questionOrder: row.QUESTION_ORDER,
+                    subTitle: row.SUB_TITLE,
+                    content: row.COVER_LETTER_CONTENT,
+                    createAt: row.COVER_LETTER_ITEM_CREATE_AT,
+                    updateAt: row.COVER_LETTER_ITEM_UPDATE_AT,
+                });
+            }
+        }
+
+        if (
+            row.PORTFOLIO_ID &&
+            !portfolioMap.has(row.PORTFOLIO_ID)
+        ) {
+            portfolioMap.set(row.PORTFOLIO_ID, true);
+
+            resume.portfolios.push({
+                portfolioId: row.PORTFOLIO_ID,
+                originalFileName: row.ORIGINAL_FILE_NAME,
+                storedFileName: row.STORED_FILE_NAME,
+                fileExtension: row.FILE_EXTENSION,
+                filePath: row.FILE_PATH,
+                fileSize: row.FILE_SIZE,
+                uploadAt: row.UPLOAD_AT,
+                fileStatus: row.FILE_STATUS,
+            });
+        }
+
+        if (
+            row.RESUME_TECH_ID &&
+            !resumeTechMap.has(row.RESUME_TECH_ID)
+        ) {
+            resumeTechMap.set(row.RESUME_TECH_ID, true);
+
+            resume.techStacks.push({
+                resumeTechId: row.RESUME_TECH_ID,
+                techCategoryCode: row.RESUME_TECH_CATEGORY_CODE,
+                techCategoryName: row.RESUME_TECH_CATEGORY_NAME,
+                techName: row.RESUME_TECH_NAME,
+                createAt: row.RESUME_TECH_CREATE_AT,
+            });
+        }
+
+        if (row.GITHUB_REPOSITORY_ID) {
+            if (!githubRepoMap.has(row.GITHUB_REPOSITORY_ID)) {
+                const githubRepository = {
+                    resumeGithubRepoId: row.RESUME_GITHUB_REPO_ID,
+                    githubRepositoryId: row.GITHUB_REPOSITORY_ID,
+                    githubRepoExternalId: row.GITHUB_REPO_EXTERNAL_ID,
+                    name: row.GITHUB_REPO_NAME,
+                    fullName: row.GITHUB_FULL_NAME,
+                    htmlUrl: row.GITHUB_HTML_URL,
+                    description: row.GITHUB_DESCRIPTION,
+                    fork: row.GITHUB_FORK,
+                    archived: row.GITHUB_ARCHIVED,
+                    defaultBranch: row.DEFAULT_BRANCH,
+                    githubCreatedAt: row.GITHUB_CREATED_AT,
+                    githubUpdatedAt: row.GITHUB_UPDATED_AT,
+                    pushedAt: row.GITHUB_PUSHED_AT,
+                    lastSyncAt: row.GITHUB_LAST_SYNC_AT,
+                    displayOrder: row.DISPLAY_ORDER,
+                    projectDescription: row.PROJECT_DESCRIPTION,
+                    createdDate: row.RESUME_GITHUB_CREATED_DATE,
+                    techStacks: [],
+                    commitDaily: [],
+                    techStackMap: new Map(),
+                    commitDailyMap: new Map(),
+                };
+
+                githubRepoMap.set(
+                    row.GITHUB_REPOSITORY_ID,
+                    githubRepository
+                );
+
+                resume.githubRepositories.push(githubRepository);
+            }
+
+            const githubRepository = githubRepoMap.get(
+                row.GITHUB_REPOSITORY_ID
+            );
+
+            if (
+                row.GITHUB_REPO_TECH_ID &&
+                !githubRepository.techStackMap.has(row.GITHUB_REPO_TECH_ID)
+            ) {
+                githubRepository.techStackMap.set(
+                    row.GITHUB_REPO_TECH_ID,
+                    true
+                );
+
+                githubRepository.techStacks.push({
+                    githubRepoTechId: row.GITHUB_REPO_TECH_ID,
+                    techCategoryCode: row.GITHUB_TECH_CATEGORY_CODE,
+                    techCategoryName: row.GITHUB_TECH_CATEGORY_NAME,
+                    techName: row.GITHUB_TECH_NAME,
+                    languageName: row.LANGUAGE_NAME,
+                    usageRatio: row.USAGE_RATIO,
+                    collectedAt: row.GITHUB_TECH_COLLECTED_AT,
+                });
+            }
+
+            if (
+                row.GITHUB_REPO_COMMIT_DAILY_ID &&
+                !githubRepository.commitDailyMap.has(
+                    row.GITHUB_REPO_COMMIT_DAILY_ID
+                )
+            ) {
+                githubRepository.commitDailyMap.set(
+                    row.GITHUB_REPO_COMMIT_DAILY_ID,
+                    true
+                );
+
+                githubRepository.commitDaily.push({
+                    githubRepoCommitDailyId:
+                        row.GITHUB_REPO_COMMIT_DAILY_ID,
+                    commitDate: row.COMMIT_DATE,
+                    commitCount: row.COMMIT_COUNT,
+                    collectedAt: row.COMMIT_COLLECTED_AT,
+                });
+            }
+        }
+    }
+
+    for (const coverLetter of resume.coverLetters) {
+        delete coverLetter.itemMap;
+    }
+
+    for (const githubRepository of resume.githubRepositories) {
+        delete githubRepository.techStackMap;
+        delete githubRepository.commitDailyMap;
+    }
+
+    return resume;
+}
+
+/**
+ * 특정 이력서 전체 상세 조회
+ */
+async function getResumeDetail(resumeIdValue) {
+    const resumeId = parseResumeId(resumeIdValue);
+    const conn = await getConnection();
+
+    try {
+        const rows = await resumeRepository.getResumeDetail(
+            resumeId,
+            conn
+        );
+
+        if (!rows || rows.length === 0) {
+            throw createError("이력서를 찾을 수 없습니다.", 404);
+        }
+
+        const resume = buildResumeDetail(rows);
+
+        return {
+            success: true,
+            message: "이력서 상세 조회 성공",
+            data: resume,
+        };
+
+    } finally {
+        await conn.close();
+    }
+}
+
 module.exports = {
     createResume,
+    getResumeDetail,
 };
