@@ -4,6 +4,11 @@ const memberProfileRepository = require("../repositories/memberProfile.repositor
 const { getConnection } = require("../config/db");
 const { createError } = require("../utils/error.util");
 
+const axios = require("axios");
+const env = require("../config/env");
+const socialAccountRepository =
+    require("../repositories/socialAccount.repository");
+
 /**
  * 회원가입
  */
@@ -131,4 +136,163 @@ async function login(member) {
 
 }
 
-module.exports = { signup, login };
+// 카카오 소셜 로그인 
+async function kakaoLogin(code) {
+
+    let conn;
+
+    try {
+
+        if (!code) {
+            throw createError(
+                "인가코드가 없습니다.",
+                400
+            );
+        }
+
+        conn = await getConnection();
+
+        // 1. access token 발급
+        const tokenResponse =
+            await axios.post(
+                "https://kauth.kakao.com/oauth/token",
+                new URLSearchParams({
+                    grant_type: "authorization_code",
+                    client_id:
+                        env.kakao.restApiKey,
+                    redirect_uri:
+                        env.kakao.redirectUri,
+                    code
+                }),
+                {
+                    headers: {
+                        "Content-Type":
+                            "application/x-www-form-urlencoded"
+                    }
+                }
+            );
+
+        const accessToken =
+            tokenResponse.data.access_token;
+
+        // 2. 카카오 회원 조회
+        const userResponse =
+            await axios.get(
+                "https://kapi.kakao.com/v2/user/me",
+                {
+                    headers: {
+                        Authorization:
+                            `Bearer ${accessToken}`
+                    }
+                }
+            );
+
+        const kakaoUser =
+            userResponse.data;
+
+        const provider = "KAKAO";
+        const providerUserId =
+            String(kakaoUser.id);
+
+        const email =
+            kakaoUser.kakao_account?.email;
+
+        if (!email) {
+            throw createError(
+                "카카오 이메일 제공 동의가 필요합니다.",
+                400
+            );
+        }
+
+        const nickname =
+            kakaoUser.properties?.nickname ||
+            "카카오회원";
+
+        // 3. SOCIAL_ACCOUNT 조회
+        let socialAccount =
+            await socialAccountRepository
+                .findByProviderAndProviderUserId(
+                    "KAKAO",
+                    providerUserId,
+                    conn
+                );
+
+        let memberId;
+
+        // 최초 로그인
+        if (!socialAccount) {
+
+            memberId =
+                await authRepository.signupSocial(
+                    {
+                        email,
+                        nickname
+                    },
+                    conn
+                );
+
+            await socialAccountRepository.create(
+                {
+                    memberId,
+                    provider: "KAKAO",
+                    providerUserId,
+                    accessToken
+                },
+                conn
+            );
+
+        } else {
+
+            memberId =
+                socialAccount.memberId;
+
+            await socialAccountRepository
+                .updateToken(
+                    socialAccount.socialAccountId,
+                    {
+                        accessToken
+                    },
+                    conn
+                );
+        }
+
+        await conn.commit();
+
+        const member =
+            await authRepository.findById(
+                memberId,
+                conn
+            );
+
+        return {
+            memberId:
+                member.memberId,
+            email:
+                member.email,
+            nickname:
+                member.nickname,
+            userType:
+                member.userType,
+            provider:
+                "KAKAO",
+            message:
+                "카카오 로그인 성공"
+        };
+
+    } catch (error) {
+
+        if (conn) {
+            await conn.rollback();
+        }
+
+        throw error;
+
+    } finally {
+
+        if (conn) {
+            await conn.close();
+        }
+    }
+}
+
+module.exports = { signup, login, kakaoLogin };

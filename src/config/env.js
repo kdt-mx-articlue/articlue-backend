@@ -60,6 +60,11 @@ const env = {
         apiVersion: process.env.GITHUB_API_VERSION || "2022-11-28",
     },
 
+    kakao: {
+        restApiKey: process.env.KAKAO_REST_API_KEY,
+        redirectUri: process.env.KAKAO_REDIRECT_URI,
+    },   
+
     oracle: {
         user: requireEnv("ORACLE_USER"),
         password: requireEnv("ORACLE_PASSWORD"),
