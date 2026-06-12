@@ -102,4 +102,81 @@ async function login(loginId, conn) {
     return result.rows[0];
 }
 
-module.exports = { signup, findByLoginId, findByEmail, login };
+/**
+ * 소셜 로그인 회원 생성
+ */
+async function signupSocial(member, conn) {
+
+    const sql = `
+        INSERT INTO MEMBER(
+            MEMBER_ID,
+            LOGIN_ID,
+            PASSWORD,
+            EMAIL,
+            NICKNAME,
+            USER_TYPE,
+            CREATE_AT,
+            UPDATE_AT
+        )
+        VALUES(
+            SEQ_MEMBER.NEXTVAL,
+            NULL,
+            NULL,
+            :email,
+            :nickname,
+            'COMMON',
+            SYSDATE,
+            NULL
+        )
+        RETURNING MEMBER_ID INTO :memberId
+    `;
+
+    const result = await conn.execute(
+        sql,
+        {
+            email: member.email,
+            nickname: member.nickname,
+
+            memberId: {
+                dir: oracledb.BIND_OUT,
+                type: oracledb.NUMBER
+            }
+        }
+    );
+
+    return result.outBinds.memberId[0];
+}
+
+async function findById(memberId, conn) {
+
+    const sql = `
+        SELECT
+            MEMBER_ID AS "memberId",
+            EMAIL AS "email",
+            NICKNAME AS "nickname",
+            USER_TYPE AS "userType"
+        FROM MEMBER
+        WHERE MEMBER_ID = :memberId
+    `;
+
+    const result = await conn.execute(
+        sql,
+        { memberId },
+        {
+            outFormat: oracledb.OUT_FORMAT_OBJECT
+        }
+    );
+
+    return result.rows[0];
+}
+
+module.exports = {
+    // 자사 회원가입, 로그인
+    signup,
+    findByLoginId,
+    findByEmail,
+    login,
+    // 소셜 로그인
+    signupSocial,
+    findById
+};

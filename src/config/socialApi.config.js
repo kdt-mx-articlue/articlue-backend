@@ -6,13 +6,18 @@ const env = require("./env");
  */
 const SOCIAL_PROVIDER = {
     GITHUB: "GITHUB",
+    KAKAO: "KAKAO",
+    NAVER: "NAVER"
 };
 
 const GITHUB_AUTH_BASE_URL = "https://github.com";
 const GITHUB_API_BASE_URL = "https://api.github.com";
+const KAKAO_AUTH_BASE_URL = "https://kauth.kakao.com";
+const KAKAO_API_BASE_URL = "https://kapi.kakao.com";
+
 
 /**
- * GitHub OAuth 인증용 axios instance
+ * GitHub, Kako OAuth 인증용 axios instance
  */
 const githubAuthClient = axios.create({
     baseURL: GITHUB_AUTH_BASE_URL,
@@ -23,8 +28,16 @@ const githubAuthClient = axios.create({
     timeout: 10000,
 });
 
+const kakaoAuthClient = axios.create({
+    baseURL: KAKAO_AUTH_BASE_URL,
+    headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+    },
+    timeout: 10000,
+});
+
 /**
- * GitHub REST API용 axios instance 생성 함수
+ * GitHub, Kakao REST API용 axios instance 생성 함수
  */
 function createGithubRestClient(accessToken) {
     return axios.create({
@@ -38,8 +51,19 @@ function createGithubRestClient(accessToken) {
     });
 }
 
+function createKakaoRestClient(accessToken) {
+
+    return axios.create({
+        baseURL: KAKAO_API_BASE_URL,
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+        },
+        timeout: 10000,
+    });
+}
+
 /**
- * GitHub OAuth API 모음
+ * GitHub, Kakao OAuth API 모음
  */
 const githubAuthApi = {
     async requestDeviceCode({ scope }) {
@@ -62,6 +86,26 @@ const githubAuthApi = {
 
         const response = await githubAuthClient.post(
             "/login/oauth/access_token",
+            params
+        );
+
+        return response.data;
+    },
+};
+
+const kakaoAuthApi = {
+
+    async requestAccessToken(code) {
+
+        const params = new URLSearchParams({
+            grant_type: "authorization_code",
+            client_id: env.kakao.restApiKey,
+            redirect_uri: env.kakao.redirectUri,
+            code,
+        });
+
+        const response = await kakaoAuthClient.post(
+            "/oauth/token",
             params
         );
 
@@ -198,8 +242,30 @@ function createGithubApiBySession(socialSession) {
     };
 }
 
+// 카카오 User API
+function createKakaoApi(accessToken) {
+
+    const client = createKakaoRestClient(accessToken);
+
+    return {
+
+        async getUser() {
+
+            const response = await client.get(
+                "/v2/user/me"
+            );
+
+            return response.data;
+        }
+    };
+}
+
 module.exports = {
     SOCIAL_PROVIDER,
+
     githubAuthApi,
     createGithubApiBySession,
+
+    kakaoAuthApi,
+    createKakaoApi,   
 };
