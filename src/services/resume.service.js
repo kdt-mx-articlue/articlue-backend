@@ -499,6 +499,31 @@ async function createResume(resume) {
 
         await conn.commit();
 
+        const resumeDetail = await getResumeDetail(resumeId);
+
+        console.log(
+            "[AI REQUEST]",
+            JSON.stringify(
+                resumeDetail.data,
+                null,
+                2
+            )
+        );
+
+        const analysisResult =
+            await aiService.analyzeResume(
+                resumeDetail.data
+            );
+
+        console.log(
+            "[AI RESPONSE]",
+            JSON.stringify(
+                analysisResult,
+                null,
+                2
+            )
+        );
+
         return {
             success: true,
             message: "이력서 전체 등록 완료",
@@ -506,6 +531,7 @@ async function createResume(resume) {
                 resumeId,
                 insertCount,
                 github: githubResult,
+                analysisResult,
             },
         };
 
