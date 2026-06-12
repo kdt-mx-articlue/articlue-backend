@@ -14,7 +14,7 @@ const testRoutes = require("./routes/test.route.js");
 const authRoutes = require("./routes/auth.route.js");
 const memberRoutes = require("./routes/member.route.js");
 const resumeRoutes = require("./routes/resume.route.js")
-// const githubRoutes = require("./routes/github.route.js");
+const githubRoutes = require("./routes/github.route.js");
 
 
 const app = express();
@@ -32,7 +32,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/resumes", resumeRoutes);
 // app.use("/api/member", memberRoutes);
-// app.use("/api/github", githubRoutes);
+app.use("/api/github", githubRoutes);
 app.use("/api/test", testRoutes);
 
 // 서버 실행
