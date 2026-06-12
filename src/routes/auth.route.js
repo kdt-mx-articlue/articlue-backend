@@ -12,4 +12,7 @@ router.post("/signup", authController.signup);
  */
 router.post("/login", authController.login);
 
+// 소셜 로그인
+router.post("/kakao", authController.kakaoLogin);
+
 module.exports = router;
