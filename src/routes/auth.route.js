@@ -14,5 +14,6 @@ router.post("/login", authController.login);
 
 // 소셜 로그인
 router.post("/kakao", authController.kakaoLogin);
+router.get("/naver/callback", authController.naverLogin);
 
 module.exports = router;
