@@ -294,4 +294,162 @@ async function kakaoLogin(code) {
     }
 }
 
-module.exports = { signup, login, kakaoLogin };
+// 네이버 소셜 로그인
+async function naverLogin(code, state) {
+
+    let conn;
+
+    try {
+
+        if (!code) {
+            throw createError(
+                "인가코드가 없습니다.",
+                400
+            );
+        }
+
+        conn = await getConnection();
+
+        // 1. access token 발급
+        const tokenResponse =
+        await axios.post(
+            "https://nid.naver.com/oauth2.0/token",
+            null,
+            {
+                params: {
+                    grant_type: "authorization_code",
+                    client_id: env.naver.clientId,
+                    client_secret: env.naver.clientSecret,
+                    code,
+                    state
+                }
+            }
+        );
+
+        const accessToken =
+            tokenResponse.data.access_token;
+
+        // 2. 네이버 회원 조회
+        const userResponse =
+            await axios.get(
+                "https://openapi.naver.com/v1/nid/me",
+                {
+                    headers: {
+                        Authorization:
+                            `Bearer ${accessToken}`
+                    }
+                }
+            );
+
+        const naverUser =
+            userResponse.data.response;
+
+        const provider = "NAVER";
+        const providerUserId =
+            String(naverUser.id);
+
+        const email =
+            naverUser.email;
+
+        if (!email) {
+            throw createError(
+                "네이버 이메일 제공 동의가 필요합니다.",
+                400
+            );
+        }
+
+        const nickname =
+            naverUser.nickname ||
+            naverUser.name ||
+            "네이버회원";
+
+        // 3. SOCIAL_ACCOUNT 조회
+        let socialAccount =
+            await socialAccountRepository
+                .findByProviderAndProviderUserId(
+                    provider,
+                    providerUserId,
+                    conn
+                );
+
+        let memberId;
+
+        // 최초 로그인
+        if (!socialAccount) {
+
+            memberId =
+                await authRepository.signupSocial(
+                    {
+                        email,
+                        nickname
+                    },
+                    conn
+                );
+
+            await socialAccountRepository.create(
+                {
+                    memberId,
+                    provider,
+                    providerUserId,
+                    accessToken
+                },
+                conn
+            );
+
+        } else {
+
+            memberId =
+                socialAccount.memberId;
+
+            await socialAccountRepository
+                .updateToken(
+                    socialAccount.socialAccountId,
+                    {
+                        accessToken
+                    },
+                    conn
+                );
+        }
+
+        await conn.commit();
+
+        const member =
+            await authRepository.findById(
+                memberId,
+                conn
+            );
+
+        return {
+            memberId:
+                member.memberId,
+            email:
+                member.email,
+            nickname:
+                member.nickname,
+            userType:
+                member.userType,
+            provider:
+                "NAVER",
+            message:
+                "네이버 로그인 성공"
+        };
+
+    } catch (error) {
+
+        console.log(error.response?.data);
+
+        if (conn) {
+            await conn.rollback();
+        }
+
+        throw error;
+
+    } finally {
+
+        if (conn) {
+            await conn.close();
+        }
+    }
+}
+
+module.exports = { signup, login, kakaoLogin, naverLogin };
