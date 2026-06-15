@@ -154,23 +154,22 @@ async function kakaoLogin(code) {
 
         // 1. access token 발급
         const tokenResponse =
-            await axios.post(
-                "https://kauth.kakao.com/oauth/token",
-                new URLSearchParams({
-                    grant_type: "authorization_code",
-                    client_id:
-                        env.kakao.restApiKey,
-                    redirect_uri:
-                        env.kakao.redirectUri,
-                    code
-                }),
-                {
-                    headers: {
-                        "Content-Type":
-                            "application/x-www-form-urlencoded"
-                    }
+        await axios.post(
+            "https://kauth.kakao.com/oauth/token",
+            new URLSearchParams({
+                grant_type: "authorization_code",
+                client_id: env.kakao.restApiKey,
+                client_secret: env.kakao.clientSecret,
+                redirect_uri: env.kakao.redirectUri,
+                code
+            }),
+            {
+                headers: {
+                    "Content-Type":
+                        "application/x-www-form-urlencoded"
                 }
-            );
+            }
+        );
 
         const accessToken =
             tokenResponse.data.access_token;

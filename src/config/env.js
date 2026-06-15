@@ -61,8 +61,9 @@ const env = {
     },
 
     kakao: {
-        restApiKey: process.env.KAKAO_REST_API_KEY,
-        redirectUri: process.env.KAKAO_REDIRECT_URI,
+        restApiKey: requireEnv("KAKAO_REST_API_KEY"),
+        redirectUri: requireEnv("KAKAO_REDIRECT_URI"),
+        clientSecret: requireEnv("KAKAO_CLIENT_SECRET"),
     },   
 
     oracle: {

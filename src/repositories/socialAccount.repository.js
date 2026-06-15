@@ -9,14 +9,14 @@ async function findByProviderAndProviderUserId(
 
     const sql = `
         SELECT
-            SOCIAL_ACCOUNT_ID AS socialAccountId,
-            MEMBER_ID AS memberId,
-            PROVIDER AS provider,
-            PROVIDER_USER_ID AS providerUserId,
-            ACCESS_TOKEN AS accessToken,
-            REFRESH_TOKEN AS refreshToken,
-            EXPIRES_AT AS expiresAt,
-            CONNECTED_AT AS connectedAt
+            SOCIAL_ACCOUNT_ID AS "socialAccountId",
+            MEMBER_ID AS "memberId",
+            PROVIDER AS "provider",
+            PROVIDER_USER_ID AS "providerUserId",
+            ACCESS_TOKEN AS "accessToken",
+            REFRESH_TOKEN AS "refreshToken",
+            EXPIRES_AT AS "expiresAt",
+            CONNECTED_AT AS "connectedAt"
         FROM SOCIAL_ACCOUNT
         WHERE PROVIDER = :provider
           AND PROVIDER_USER_ID = :providerUserId
@@ -46,10 +46,10 @@ async function findByMemberId(
 
     const sql = `
         SELECT
-            SOCIAL_ACCOUNT_ID AS socialAccountId,
-            MEMBER_ID AS memberId,
-            PROVIDER AS provider,
-            PROVIDER_USER_ID AS providerUserId
+            SOCIAL_ACCOUNT_ID AS "socialAccountId",
+            MEMBER_ID AS "memberId",
+            PROVIDER AS "provider",
+            PROVIDER_USER_ID AS "providerUserId"
         FROM SOCIAL_ACCOUNT
         WHERE MEMBER_ID = :memberId
     `;
@@ -75,6 +75,7 @@ async function create(
 
     const sql = `
         INSERT INTO SOCIAL_ACCOUNT (
+            SOCIAL_ACCOUNT_ID,
             MEMBER_ID,
             PROVIDER,
             PROVIDER_USER_ID,
@@ -84,6 +85,7 @@ async function create(
             CONNECTED_AT
         )
         VALUES (
+            SEQ_SOCIAL_ACCOUNT.NEXTVAL,
             :memberId,
             :provider,
             :providerUserId,
