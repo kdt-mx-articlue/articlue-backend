@@ -93,4 +93,22 @@ async function kakaoLogin(req, res) {
     }
 }
 
-module.exports = { signup, login, kakaoLogin };
+// 네이버 로그인
+async function naverLogin(req, res, next) {
+
+    try {
+
+        const result =
+            await authService.naverLogin(
+                req.query.code,
+                req.query.state
+            );
+
+        res.json(result);
+
+    } catch (error) {
+        next(error);
+    }
+}
+
+module.exports = { signup, login, kakaoLogin, naverLogin };
