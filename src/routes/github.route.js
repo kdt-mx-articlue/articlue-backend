@@ -57,23 +57,6 @@ router.post("/auth/login", githubController.login);
 router.post("/auth/token", githubController.issueToken);
 
 /**
- * 깃허브 유저정보 조회
- */
-router.get("/info", requireGithubSession, githubController.getInfo);
-
-/**
- * 깃허브 저장소 조회
- */
-router.get("/repos", requireGithubSession, githubController.getRepos);
-
-/**
- * 깃허브 상세 조회
- *
- * DB 저장 없이 테이블 구조에 맞춘 preview를 반환한다.
- */
-router.get("/detail/info", requireGithubSession, githubController.getDetailInfo);
-
-/**
  * 깃허브 정보 저장
  *
  * GitHub 데이터를 실제 Oracle DB에 저장한다.
