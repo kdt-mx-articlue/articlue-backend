@@ -1,0 +1,52 @@
+{
+  "crawlDate": "2026-06-17",
+  "status": "SUCCESS",
+  "totalCount": 5,
+  "articles": [
+    {
+      "id": 1,
+      "title": "국내 유일 ‘수학적최적화’ 컨설팅 기업 LG CNS",
+      "summary": "200개 현장에서 입증된 수학적최적화 기술새 설비 없이 재고·비용 줄여 효율 극대화 Article at a Glance 인공지능(AI)이 기업의 문제 해결 도구로 각광받는 가운데 LG CNS는 ‘수학적최적화(Mathematica ...",
+      "url": "https://dbr.donga.com/article/view/1904/article_no/12161",
+      "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/06/d4574ad9600d88c400e7b69b8aaa5753.jpg",
+      "source": "DBR",
+      "publishedAt": "2026-06-01T00:00:00+09:00"
+    },
+    {
+      "id": 2,
+      "title": "AI가 인용한 브랜드, 광고 클릭 91% 올라\n제품 페이지에 수치·데이터 명시하면 유리",
+      "summary": "Article at a Glance 검색 광고의 기본은 ‘클릭당 과금(CPC)’이다. 클릭이 사라지면 수익도 줄어야 정상이다. 그런데 AI가 검색 결과를 대신 요약하는 ‘제로클릭’ 시대가 왔지만 구글과 네이버 ...",
+      "url": "https://dbr.donga.com/article/view/1904/article_no/12147",
+      "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/05/5fa249fb0885e219270a1f8b51b69401.jpg",
+      "source": "DBR",
+      "publishedAt": "2026-06-01T00:00:00+09:00"
+    },
+    {
+      "id": 3,
+      "title": "“기업들 연합해 제조 데이터 수집 협력 구조 설계할 필요”",
+      "summary": "참고 기사 : 휴머노이드 현장 배치 설계 프레임워크Interview: 한재권 한양대 ERICA 로봇공학과 교수·에이로봇 CTO한재권 교수는 미국 버지니아공대 데니스 홍 교수 연구실에서 휴머노이드 ‘찰리(CHARLI)&r ...",
+      "url": "https://dbr.donga.com/article/view/1904/article_no/12143",
+      "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/05/03ce9155658601671723881e0d4b6a70.jpg",
+      "source": "DBR",
+      "publishedAt": "2026-06-01T00:00:00+09:00"
+    },
+    {
+      "id": 4,
+      "title": "피지컬 AI 경쟁력 위한 가치 사슬 재정의",
+      "summary": "피지컬 AI 조기 투입해 행동 데이터 수집데이터·HW·인프라 중 병목 구간 파악하라 Article at a Glance 한국은 제조 현장, 부품·배터리·반도체 생태계, 응용 엔지니어링 역량을 동시에 갖 ...",
+      "url": "https://dbr.donga.com/article/view/1904/article_no/12141",
+      "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/05/2f923d0f6c8276910fa69447e8caef03.jpg",
+      "source": "DBR",
+      "publishedAt": "2026-06-01T00:00:00+09:00"
+    },
+    {
+      "id": 5,
+      "title": "AI 골드러시, ‘곡괭이와 삽’을 찾아라",
+      "summary": "‘로봇(robot)’이라는 단어는 체코어 ‘로보타(robota)’, 곧 ‘고된 노동’에서 비롯됐습니다. 1920년 체코 극작가 카렐 차페크의 희곡 『R.U.R.』을 통해 처음 세상에 나온 ...",
+      "url": "https://dbr.donga.com/article/view/1904/article_no/12134",
+      "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/05/24afbde80f9e94b4a2b950e462020008.jpg",
+      "source": "DBR",
+      "publishedAt": "2026-06-01T00:00:00+09:00"
+    }
+  ]
+}
