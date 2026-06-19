@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { chromium } = require("playwright");
 
 // [엄격한 규칙]
 // fs, path 모듈 사용 금지
@@ -96,64 +97,120 @@ async function crawlList(startNum = 1, endNum = 20) {
  * [Step 2] 기사 본문 수집 (Deep Crawling)
  */
 async function crawlArticle(url) {
+
+    let context;
+
     if (!url) return "";
-    
+
+    console.log("=================================================");
+    console.log("URL :", url);
+
     try {
-        const response = await axios.get(url, { 
-            headers: DEFAULT_HEADERS,
-            timeout: REQUEST_TIMEOUT 
-        });
-        const $ = cheerio.load(response.data);
+
+        context = await chromium.launchPersistentContext(
+            "./browser/chrome-profile",
+            {
+                channel: "chrome",
+                headless: true
+            }
+        );
         
+        const page = await context.newPage();
+
+        await page.goto(url, {
+            waitUntil: "networkidle",
+            timeout: REQUEST_TIMEOUT
+        });
+
+        const html = await page.content();
+
+        const isLogin = await page.locator("text=로그인").count();
+
+        if (isLogin > 0) {
+            throw new Error("DBR 로그인 세션이 만료되었습니다.");
+        }       
+
+        const $ = cheerio.load(html);
+
+        // ===============================
+        // 기존 selector 검사
+        // ===============================
+
         let rawBody = "";
 
         const selectors = [
-            '#article_content', 
-            '.article_body', 
-            '.article_txt', 
-            '.view_con', 
-            '.article_view', 
-            'article', 
-            'main'
+            ".article-free-zone",
+            ".cont-article",
+            ".articleBody",
+            "#article_content",
+            ".article_body",
+            ".article_txt",
+            ".view_con",
+            ".article_view",
+            "article",
+            "main"
         ];
-        
+
         for (const selector of selectors) {
+
             const target = $(selector);
+
+            console.log(
+                `Selector [${selector}] -> ${target.length}`
+            );
+
             if (target.length > 0) {
-                // 노이즈 태그 제거 (noscript, svg 추가)
-                target.find('script, style, iframe, form, button, noscript, svg').remove(); 
-                
-                // 줄바꿈 강제 주입
-                target.find('br').replaceWith('\n');
-                target.find('p').append('\n\n');
-                target.find('div, section, article').append('\n'); 
-                target.find('li').append('\n'); 
-                
+
+                target.find(
+                    "script,style,iframe,form,button,noscript,svg"
+                ).remove();
+
+                target.find("br").replaceWith("\n");
+
+                target.find("p").append("\n\n");
+
+                target.find("div,section,article").append("\n");
+
+                target.find("li").append("\n");
+
                 rawBody = target.text().trim();
-                
-                // 명확한 디버그 로그
+
                 console.log(
-                    `[Crawler] 본문 수집 완료\n` +
-                    ` - URL: ${url}\n` +
-                    ` - Raw Length: ${rawBody.length}`
+                    "선택된 Selector :",
+                    selector
                 );
-                
-                break; 
+
+                console.log(
+                    "본문 길이 :",
+                    rawBody.length
+                );
+
+                break;
             }
         }
 
-        // DOM 구조 변경 등으로 셀렉터를 전혀 찾지 못한 경우에 대한 경고 로그
         if (!rawBody) {
-            console.warn(
-                `[Crawler Warning] 본문 Selector를 찾지 못했습니다.\n - URL: ${url}`
-            );
+
+            console.warn("본문 Selector를 찾지 못했습니다.");
+
         }
 
         return rawBody;
+
     } catch (error) {
-        console.error(`[Crawler Error] 본문 수집 실패\n - URL: ${url}\n - Reason: ${error.message}`);
+
+        console.error(error);
+
         return "";
+
+    } finally {
+
+        if (context) {
+            await context.close();
+        }
+
     }
+
 }
 
 module.exports = {
