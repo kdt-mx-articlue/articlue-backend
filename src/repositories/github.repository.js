@@ -1,23 +1,27 @@
 const { oracledb } = require("../config/db");
 
 /**
- * tech_stack 테이블에서 사용 가능한 기술스택 목록을 조회한다.
+ * TECH_CATEGORY 테이블에서 기술명 → 기술분류코드 맵 생성
+ *
+ * 최종 DDL 기준:
+ * - TECH_CATEGORY_CODE
+ * - TECH_CATEGORY_NAME
+ * - TECH_NAME
  */
 async function findActiveTechStackMap(conn) {
     const result = await conn.execute(
         `
         SELECT
-            tech_stack_id AS "techStackId",
-            tech_name AS "techName"
-        FROM tech_stack
-        WHERE use_yn = 'Y'
+            TECH_CATEGORY_CODE AS "techCategoryCode",
+            TECH_NAME AS "techName"
+        FROM TECH_CATEGORY
         `
     );
 
     const map = {};
 
     for (const row of result.rows) {
-        map[String(row.techName).toLowerCase()] = row.techStackId;
+        map[String(row.techName).toLowerCase()] = row.techCategoryCode;
     }
 
     return map;
@@ -30,14 +34,14 @@ async function findGithubAccountId(conn, { member_id, id }) {
     const result = await conn.execute(
         `
         SELECT
-            github_account_id AS "githubAccountId"
-        FROM github_account
-        WHERE member_id = :member_id
-          AND id = :id
+            GITHUB_ACCOUNT_ID AS "githubAccountId"
+        FROM GITHUB_ACCOUNT
+        WHERE MEMBER_ID = :member_id
+          AND GITHUB_USER_ID = :github_user_id
         `,
         {
             member_id,
-            id,
+            github_user_id: id,
         }
     );
 
@@ -48,33 +52,46 @@ async function findGithubAccountId(conn, { member_id, id }) {
     return result.rows[0].githubAccountId;
 }
 
+/**
+ * GitHub 계정 신규 저장
+ */
 async function insertGithubAccount(conn, row) {
     const result = await conn.execute(
         `
-        INSERT INTO github_account (
-            github_account_id,
-            member_id,
-            id,
-            login,
-            html_url,
-            connected_at,
-            last_sync_at
-        ) VALUES (
+        INSERT INTO GITHUB_ACCOUNT (
+            GITHUB_ACCOUNT_ID,
+            MEMBER_ID,
+            GITHUB_USER_ID,
+            LOGIN,
+            HTML_URL,
+            ACCESS_TOKEN,
+            REFRESH_TOKEN,
+            EXPIRES_AT,
+            CONNECTED_AT,
+            LAST_SYNC_AT
+        )
+        VALUES (
             SEQ_GITHUB_ACCOUNT.NEXTVAL,
             :member_id,
-            :id,
+            :github_user_id,
             :login,
             :html_url,
+            :access_token,
+            :refresh_token,
+            :expires_at,
             SYSDATE,
             SYSDATE
         )
-        RETURNING github_account_id INTO :github_account_id
+        RETURNING GITHUB_ACCOUNT_ID INTO :github_account_id
         `,
         {
             member_id: row.member_id,
-            id: row.id,
+            github_user_id: row.id,
             login: row.login,
             html_url: row.html_url,
+            access_token: row.access_token || null,
+            refresh_token: row.refresh_token || null,
+            expires_at: row.expires_at || null,
             github_account_id: {
                 dir: oracledb.BIND_OUT,
                 type: oracledb.NUMBER,
@@ -85,20 +102,29 @@ async function insertGithubAccount(conn, row) {
     return result.outBinds.github_account_id[0];
 }
 
+/**
+ * GitHub 계정 갱신
+ */
 async function updateGithubAccount(conn, githubAccountId, row) {
     await conn.execute(
         `
-        UPDATE github_account
+        UPDATE GITHUB_ACCOUNT
         SET
-            login = :login,
-            html_url = :html_url,
-            last_sync_at = SYSDATE
-        WHERE github_account_id = :github_account_id
+            LOGIN = :login,
+            HTML_URL = :html_url,
+            ACCESS_TOKEN = NVL(:access_token, ACCESS_TOKEN),
+            REFRESH_TOKEN = NVL(:refresh_token, REFRESH_TOKEN),
+            EXPIRES_AT = NVL(:expires_at, EXPIRES_AT),
+            LAST_SYNC_AT = SYSDATE
+        WHERE GITHUB_ACCOUNT_ID = :github_account_id
         `,
         {
             github_account_id: githubAccountId,
             login: row.login,
             html_url: row.html_url,
+            access_token: row.access_token || null,
+            refresh_token: row.refresh_token || null,
+            expires_at: row.expires_at || null,
         }
     );
 
@@ -106,7 +132,7 @@ async function updateGithubAccount(conn, githubAccountId, row) {
 }
 
 /**
- * github_account upsert
+ * GitHub 계정 upsert
  */
 async function upsertGithubAccount(conn, row) {
     const githubAccountId = await findGithubAccountId(conn, row);
@@ -119,20 +145,20 @@ async function upsertGithubAccount(conn, row) {
 }
 
 /**
- * github_account_id + GitHub repository id 기준으로 기존 저장소 확인
+ * github_account_id + GitHub repository external id 기준으로 기존 저장소 확인
  */
 async function findGithubRepositoryId(conn, { github_account_id, id }) {
     const result = await conn.execute(
         `
         SELECT
-            github_repository_id AS "githubRepositoryId"
-        FROM github_repository
-        WHERE github_account_id = :github_account_id
-          AND id = :id
+            GITHUB_REPOSITORY_ID AS "githubRepositoryId"
+        FROM GITHUB_REPOSITORY
+        WHERE GITHUB_ACCOUNT_ID = :github_account_id
+          AND GITHUB_REPO_EXTERNAL_ID = :github_repo_external_id
         `,
         {
             github_account_id,
-            id,
+            github_repo_external_id: id,
         }
     );
 
@@ -143,28 +169,32 @@ async function findGithubRepositoryId(conn, { github_account_id, id }) {
     return result.rows[0].githubRepositoryId;
 }
 
+/**
+ * GitHub 저장소 신규 저장
+ */
 async function insertGithubRepository(conn, row) {
     const result = await conn.execute(
         `
-        INSERT INTO github_repository (
-            github_repository_id,
-            github_account_id,
-            id,
-            name,
-            full_name,
-            html_url,
-            description,
-            fork,
-            archived,
-            default_branch,
-            created_at,
-            updated_at,
-            pushed_at,
-            last_sync_at
-        ) VALUES (
+        INSERT INTO GITHUB_REPOSITORY (
+            GITHUB_REPOSITORY_ID,
+            GITHUB_ACCOUNT_ID,
+            GITHUB_REPO_EXTERNAL_ID,
+            NAME,
+            FULL_NAME,
+            HTML_URL,
+            DESCRIPTION,
+            FORK,
+            ARCHIVED,
+            DEFAULT_BRANCH,
+            CREATED_AT,
+            UPDATED_AT,
+            PUSHED_AT,
+            LAST_SYNC_AT
+        )
+        VALUES (
             SEQ_GITHUB_REPOSITORY.NEXTVAL,
             :github_account_id,
-            :id,
+            :github_repo_external_id,
             :name,
             :full_name,
             :html_url,
@@ -177,11 +207,11 @@ async function insertGithubRepository(conn, row) {
             :pushed_at,
             SYSDATE
         )
-        RETURNING github_repository_id INTO :github_repository_id
+        RETURNING GITHUB_REPOSITORY_ID INTO :github_repository_id
         `,
         {
             github_account_id: row.github_account_id,
-            id: row.id,
+            github_repo_external_id: row.id,
             name: row.name,
             full_name: row.full_name,
             html_url: row.html_url,
@@ -202,23 +232,26 @@ async function insertGithubRepository(conn, row) {
     return result.outBinds.github_repository_id[0];
 }
 
+/**
+ * GitHub 저장소 갱신
+ */
 async function updateGithubRepository(conn, githubRepositoryId, row) {
     await conn.execute(
         `
-        UPDATE github_repository
+        UPDATE GITHUB_REPOSITORY
         SET
-            name = :name,
-            full_name = :full_name,
-            html_url = :html_url,
-            description = :description,
-            fork = :fork,
-            archived = :archived,
-            default_branch = :default_branch,
-            created_at = :created_at,
-            updated_at = :updated_at,
-            pushed_at = :pushed_at,
-            last_sync_at = SYSDATE
-        WHERE github_repository_id = :github_repository_id
+            NAME = :name,
+            FULL_NAME = :full_name,
+            HTML_URL = :html_url,
+            DESCRIPTION = :description,
+            FORK = :fork,
+            ARCHIVED = :archived,
+            DEFAULT_BRANCH = :default_branch,
+            CREATED_AT = :created_at,
+            UPDATED_AT = :updated_at,
+            PUSHED_AT = :pushed_at,
+            LAST_SYNC_AT = SYSDATE
+        WHERE GITHUB_REPOSITORY_ID = :github_repository_id
         `,
         {
             github_repository_id: githubRepositoryId,
@@ -239,7 +272,7 @@ async function updateGithubRepository(conn, githubRepositoryId, row) {
 }
 
 /**
- * github_repository upsert
+ * GitHub 저장소 upsert
  */
 async function upsertGithubRepository(conn, row) {
     const githubRepositoryId = await findGithubRepositoryId(conn, row);
@@ -251,11 +284,14 @@ async function upsertGithubRepository(conn, row) {
     return await insertGithubRepository(conn, row);
 }
 
+/**
+ * 특정 GitHub 저장소의 기술스택 삭제
+ */
 async function deleteGithubRepoTechStacks(conn, githubRepositoryId) {
     await conn.execute(
         `
-        DELETE FROM github_repo_tech_stack
-        WHERE github_repository_id = :github_repository_id
+        DELETE FROM GITHUB_REPO_TECH_STACK
+        WHERE GITHUB_REPOSITORY_ID = :github_repository_id
         `,
         {
             github_repository_id: githubRepositoryId,
@@ -263,29 +299,36 @@ async function deleteGithubRepoTechStacks(conn, githubRepositoryId) {
     );
 }
 
+/**
+ * GitHub 저장소 기술스택 저장
+ *
+ * 최종 DDL 기준:
+ * - TECH_CATEGORY_CODE 사용
+ */
 async function insertGithubRepoTechStack(conn, row) {
     const result = await conn.execute(
         `
-        INSERT INTO github_repo_tech_stack (
-            github_repo_tech_id,
-            github_repository_id,
-            tech_stack_id,
-            language_name,
-            usage_ratio,
-            collected_at
-        ) VALUES (
+        INSERT INTO GITHUB_REPO_TECH_STACK (
+            GITHUB_REPO_TECH_ID,
+            GITHUB_REPOSITORY_ID,
+            TECH_CATEGORY_CODE,
+            LANGUAGE_NAME,
+            USAGE_RATIO,
+            COLLECTED_AT
+        )
+        VALUES (
             SEQ_GITHUB_REPO_TECH.NEXTVAL,
             :github_repository_id,
-            :tech_stack_id,
+            :tech_category_code,
             :language_name,
             :usage_ratio,
             SYSDATE
         )
-        RETURNING github_repo_tech_id INTO :github_repo_tech_id
+        RETURNING GITHUB_REPO_TECH_ID INTO :github_repo_tech_id
         `,
         {
             github_repository_id: row.github_repository_id,
-            tech_stack_id: row.tech_stack_id,
+            tech_category_code: row.tech_category_code,
             language_name: row.language_name,
             usage_ratio: row.usage_ratio,
             github_repo_tech_id: {
@@ -298,11 +341,14 @@ async function insertGithubRepoTechStack(conn, row) {
     return result.outBinds.github_repo_tech_id[0];
 }
 
+/**
+ * 특정 GitHub 저장소의 일별 커밋 통계 삭제
+ */
 async function deleteGithubRepoCommitDaily(conn, githubRepositoryId) {
     await conn.execute(
         `
-        DELETE FROM github_repo_commit_daily
-        WHERE github_repository_id = :github_repository_id
+        DELETE FROM GITHUB_REPO_COMMIT_DAILY
+        WHERE GITHUB_REPOSITORY_ID = :github_repository_id
         `,
         {
             github_repository_id: githubRepositoryId,
@@ -310,23 +356,27 @@ async function deleteGithubRepoCommitDaily(conn, githubRepositoryId) {
     );
 }
 
+/**
+ * GitHub 저장소 일별 커밋 통계 저장
+ */
 async function insertGithubRepoCommitDaily(conn, row) {
     const result = await conn.execute(
         `
-        INSERT INTO github_repo_commit_daily (
-            github_repo_commit_daily_id,
-            github_repository_id,
-            commit_date,
-            commit_count,
-            collected_at
-        ) VALUES (
-            SEQ_GITHUB_REPO_COMMIT_DAILY.NEXTVAL,
+        INSERT INTO GITHUB_REPO_COMMIT_DAILY (
+            GITHUB_REPO_COMMIT_DAILY_ID,
+            GITHUB_REPOSITORY_ID,
+            COMMIT_DATE,
+            COMMIT_COUNT,
+            COLLECTED_AT
+        )
+        VALUES (
+            SEQ_GITHUB_COMMIT_DAILY.NEXTVAL,
             :github_repository_id,
             :commit_date,
             :commit_count,
             SYSDATE
         )
-        RETURNING github_repo_commit_daily_id INTO :github_repo_commit_daily_id
+        RETURNING GITHUB_REPO_COMMIT_DAILY_ID INTO :github_repo_commit_daily_id
         `,
         {
             github_repository_id: row.github_repository_id,
@@ -342,92 +392,139 @@ async function insertGithubRepoCommitDaily(conn, row) {
     return result.outBinds.github_repo_commit_daily_id[0];
 }
 
-// 3개의 저장소 가져오기.
-async function findTopRepositories(memberId,conn){
+/**
+ * 회원의 최근 커밋 기준 상위 3개 저장소 조회
+ *
+ * Oracle 11g 기준:
+ * - FETCH FIRST 사용 불가
+ * - ROWNUM 방식 사용
+ */
+async function findTopRepositories(memberId, conn) {
     const sql = `
-        SELECT
-            gr.GITHUB_REPOSITORY_ID AS githubRepositoryId,
-            gr.NAME AS name,
-            gr.FULL_NAME AS fullName,
-            gr.HTML_URL AS htmlUrl,
-            gr.DESCRIPTION AS description,
-            MAX(gcd.COMMIT_DATE) AS lastCommitDate
-        FROM GITHUB_ACCOUNT ga
-        INNER JOIN GITHUB_REPOSITORY gr
-            ON ga.GITHUB_ACCOUNT_ID = gr.GITHUB_ACCOUNT_ID
-        INNER JOIN GITHUB_REPO_COMMIT_DAILY gcd
-            ON gr.GITHUB_REPOSITORY_ID = gcd.GITHUB_REPOSITORY_ID
-        WHERE ga.MEMBER_ID = :memberId
-        GROUP BY
-            gr.GITHUB_REPOSITORY_ID,
-            gr.NAME,
-            gr.FULL_NAME,
-            gr.HTML_URL,
-            gr.DESCRIPTION
-        ORDER BY MAX(gcd.COMMIT_DATE) DESC
-        FETCH FIRST 3 ROWS ONLY
+        SELECT *
+        FROM (
+            SELECT
+                GR.GITHUB_REPOSITORY_ID AS "githubRepositoryId",
+                GR.NAME AS "name",
+                GR.FULL_NAME AS "fullName",
+                GR.HTML_URL AS "htmlUrl",
+                GR.DESCRIPTION AS "description",
+                MAX(GCD.COMMIT_DATE) AS "lastCommitDate"
+            FROM GITHUB_ACCOUNT GA
+            INNER JOIN GITHUB_REPOSITORY GR
+                ON GA.GITHUB_ACCOUNT_ID = GR.GITHUB_ACCOUNT_ID
+            LEFT JOIN GITHUB_REPO_COMMIT_DAILY GCD
+                ON GR.GITHUB_REPOSITORY_ID = GCD.GITHUB_REPOSITORY_ID
+            WHERE GA.MEMBER_ID = :memberId
+            GROUP BY
+                GR.GITHUB_REPOSITORY_ID,
+                GR.NAME,
+                GR.FULL_NAME,
+                GR.HTML_URL,
+                GR.DESCRIPTION
+            ORDER BY MAX(GCD.COMMIT_DATE) DESC NULLS LAST
+        )
+        WHERE ROWNUM <= 3
     `;
 
     const result = await conn.execute(
         sql,
         {
-            memberId
+            memberId,
         }
     );
 
     return result.rows;
 }
 
-// 전체 저장소 가져오기.
-async function findAllRepositories(memberId,conn){
+/**
+ * 회원의 전체 GitHub 저장소 조회
+ */
+async function findAllRepositories(memberId, conn) {
     const sql = `
         SELECT
-            gr.GITHUB_REPOSITORY_ID AS githubRepositoryId,
-            gr.NAME AS name,
-            gr.FULL_NAME AS fullName,
-            gr.HTML_URL AS htmlUrl,
-            gr.DESCRIPTION AS description,
-            MAX(gcd.COMMIT_DATE) AS lastCommitDate
-        FROM GITHUB_ACCOUNT ga
-        INNER JOIN GITHUB_REPOSITORY gr
-            ON ga.GITHUB_ACCOUNT_ID = gr.GITHUB_ACCOUNT_ID
-        LEFT JOIN GITHUB_REPO_COMMIT_DAILY gcd
-            ON gr.GITHUB_REPOSITORY_ID = gcd.GITHUB_REPOSITORY_ID
-        WHERE ga.MEMBER_ID = :memberId
+            GR.GITHUB_REPOSITORY_ID AS "githubRepositoryId",
+            GR.NAME AS "name",
+            GR.FULL_NAME AS "fullName",
+            GR.HTML_URL AS "htmlUrl",
+            GR.DESCRIPTION AS "description",
+            MAX(GCD.COMMIT_DATE) AS "lastCommitDate"
+        FROM GITHUB_ACCOUNT GA
+        INNER JOIN GITHUB_REPOSITORY GR
+            ON GA.GITHUB_ACCOUNT_ID = GR.GITHUB_ACCOUNT_ID
+        LEFT JOIN GITHUB_REPO_COMMIT_DAILY GCD
+            ON GR.GITHUB_REPOSITORY_ID = GCD.GITHUB_REPOSITORY_ID
+        WHERE GA.MEMBER_ID = :memberId
         GROUP BY
-            gr.GITHUB_REPOSITORY_ID,
-            gr.NAME,
-            gr.FULL_NAME,
-            gr.HTML_URL,
-            gr.DESCRIPTION
+            GR.GITHUB_REPOSITORY_ID,
+            GR.NAME,
+            GR.FULL_NAME,
+            GR.HTML_URL,
+            GR.DESCRIPTION
         ORDER BY
-            MAX(gcd.COMMIT_DATE) DESC NULLS LAST
+            MAX(GCD.COMMIT_DATE) DESC NULLS LAST
     `;
 
     const result = await conn.execute(
         sql,
         {
-            memberId
+            memberId,
         }
     );
 
     return result.rows;
+}
+
+async function createResumeGithubRepository(conn, row) {
+    const sql = `
+        INSERT INTO RESUME_GITHUB_REPOSITORY
+        (
+            RESUME_GITHUB_REPO_ID,
+            RESUME_ID,
+            GITHUB_REPOSITORY_ID,
+            DISPLAY_ORDER,
+            PROJECT_DESCRIPTION,
+            CREATED_DATE
+        )
+        VALUES
+        (
+            SEQ_RESUME_GITHUB_REPO.NEXTVAL,
+            :resume_id,
+            :github_repository_id,
+            :display_order,
+            :project_description,
+            SYSDATE
+        )
+    `;
+
+    return await conn.execute(
+        sql,
+        {
+            resume_id: row.resume_id,
+            github_repository_id: row.github_repository_id,
+            display_order: row.display_order || null,
+            project_description: row.project_description || null,
+        }
+    );
 }
 
 module.exports = {
     // 깃허브 저장소 가져오기.
     findActiveTechStackMap,
     findTopRepositories,
-
+    findAllRepositories,
     // GitHub API 요청을 통한 기능 
     upsertGithubAccount,
     upsertGithubRepository,
+
+    // 이력서-GitHub 저장소 연결
+    createResumeGithubRepository,
 
     // 기술스택 관련 모듈
     deleteGithubRepoTechStacks,
     insertGithubRepoTechStack,
 
+    // 커밋 통계ㅒ
     deleteGithubRepoCommitDaily,
     insertGithubRepoCommitDaily,
 };
-
