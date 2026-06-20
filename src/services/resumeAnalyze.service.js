@@ -1,13 +1,7 @@
 const { getConnection } = require("../config/db");
 const aiClient = require("../config/ai.config");
-
 const analysisRepository = require("../repositories/resumeAnalysis.repository");
-
 const { createError } = require("../utils/error.util");
-
-/* =========================================================
-   기업 추천 방사형 지표 고정 목록
-   ========================================================= */
 
 const RADAR_METRIC_TYPES = [
     "business_fit",
@@ -18,10 +12,6 @@ const RADAR_METRIC_TYPES = [
 ];
 
 const MAX_RECOMMENDATION_LIMIT = 20;
-
-/* =========================================================
-   공통 유틸
-   ========================================================= */
 
 function isBlank(value) {
     return value === undefined || value === null || String(value).trim() === "";
@@ -116,31 +106,36 @@ function calculateOverallScore(metrics) {
     return Number((total / metrics.length).toFixed(2));
 }
 
-/**
- * AI 응답 wrapper 제거
- *
- * 허용 형태:
- * 1. { success, message, data: {...} }
- * 2. { analysis: {...} }
- * 3. { recommendations: [...] }
- */
 function unwrapAiResult(aiResult) {
     if (!aiResult) {
         throw createError("AI 분석 결과가 없습니다.", 502);
     }
 
-    return (
+    const root =
         aiResult.data ||
-        aiResult.analysis ||
         aiResult.analysisResult ||
         aiResult.analysis_result ||
-        aiResult
-    );
-}
+        aiResult;
 
-/* =========================================================
-   AI 응답 검증 / 정규화
-   ========================================================= */
+    if (root.error) {
+        throw createError(
+            typeof root.error === "string"
+                ? root.error
+                : "AI 분석 중 오류가 발생했습니다.",
+            502
+        );
+    }
+
+    if (
+        !isBlank(root.status) &&
+        String(root.status).toLowerCase() !== "done" &&
+        String(root.status).toLowerCase() !== "success"
+    ) {
+        throw createError(`AI 분석 상태가 완료 상태가 아닙니다. status=${root.status}`, 502);
+    }
+
+    return root.result || root;
+}
 
 function validateAiResumeId(aiRoot, resumeId) {
     const aiResumeId = pick(aiRoot, ["resumeId", "resume_id"]);
@@ -159,33 +154,8 @@ function validateAiResumeId(aiRoot, resumeId) {
     }
 }
 
-function validateAiAnalysisStage(aiRoot, analysisStage) {
-    const aiAnalysisStage = pick(aiRoot, ["analysisStage", "analysis_stage"]);
-
-    if (isBlank(aiAnalysisStage)) {
-        return;
-    }
-
-    if (String(aiAnalysisStage).toUpperCase() !== String(analysisStage).toUpperCase()) {
-        throw createError("AI 분석 결과의 분석 단계가 요청 분석 단계와 다릅니다.", 502);
-    }
-}
-
-/**
- * recommendation.metrics 객체를 DB 저장용 배열로 변환
- *
- * FastAPI 응답 기준:
- *
- * metrics: {
- *   business_fit: {
- *     score: 85.12,
- *     reason_text: "..."
- *   },
- *   ...
- * }
- */
-function normalizeRadarMetrics(recommendation) {
-    const metricsSource = recommendation.metrics;
+function normalizeRadarMetrics(analysisItem) {
+    const metricsSource = analysisItem.metrics;
 
     if (
         !metricsSource ||
@@ -221,71 +191,87 @@ function normalizeRadarMetrics(recommendation) {
     return metrics;
 }
 
-/**
- * AI가 반환한 recommendations 배열 정규화
- *
- * FastAPI 응답 기준:
- *
- * recommendations: [
- *   {
- *     rank: 1,
- *     company_id: 10,
- *     job_posting_id: 1,
- *     overall_score: 83.65,
- *     metrics: {...}
- *   }
- * ]
- */
-function normalizeRecommendationItems(aiRoot, analysisStage, recommendationLimit) {
-    const recommendations =
+function getAiJobMatches(aiRoot) {
+    const jobMatches =
+        aiRoot.jobMatches ||
+        aiRoot.job_matches ||
         aiRoot.recommendations ||
         aiRoot.companyRecommendations ||
-        aiRoot.company_recommendations ||
-        aiRoot.recommendationList ||
-        aiRoot.recommendation_list;
+        aiRoot.company_recommendations;
 
-    if (!Array.isArray(recommendations) || recommendations.length === 0) {
-        throw createError("AI 분석 결과 recommendations 배열이 없습니다.", 502);
+    if (Array.isArray(jobMatches)) {
+        return jobMatches;
     }
 
-    if (recommendations.length > MAX_RECOMMENDATION_LIMIT) {
+    const jobPostingId = pick(aiRoot, ["jobPostingId", "job_posting_id"]);
+
+    if (!isBlank(jobPostingId) && aiRoot.metrics) {
+        return [aiRoot];
+    }
+
+    throw createError("AI 분석 결과 job_matches 배열이 없습니다.", 502);
+}
+
+function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
+    const jobMatches = getAiJobMatches(aiRoot);
+
+    if (jobMatches.length === 0) {
+        throw createError("AI 추천 결과가 비어 있습니다.", 502);
+    }
+
+    if (jobMatches.length > MAX_RECOMMENDATION_LIMIT) {
         throw createError("AI 추천 결과는 최대 20개까지만 저장할 수 있습니다.", 502);
     }
 
-    if (recommendations.length > recommendationLimit) {
-        throw createError("AI 추천 결과 개수가 요청한 recommendation_limit보다 많습니다.", 502);
-    }
-
     const jobPostingIdSet = new Set();
+    const analysisItems = [];
+    const skippedItems = [];
 
-    return recommendations.map((recommendation, index) => {
-        const recommendationAnalysisStage = pick(
-            recommendation,
-            ["analysisStage", "analysis_stage"]
-        );
+    for (let index = 0; index < jobMatches.length; index++) {
+        const item = jobMatches[index];
+
+        const rawJobPostingId = pick(item, ["jobPostingId", "job_posting_id"]);
+        const jobPostingIdNumber = Number(rawJobPostingId);
 
         if (
-            !isBlank(recommendationAnalysisStage) &&
-            String(recommendationAnalysisStage).toUpperCase() !== String(analysisStage).toUpperCase()
+            !Number.isInteger(jobPostingIdNumber) ||
+            jobPostingIdNumber <= 0
         ) {
+            skippedItems.push({
+                index,
+                reason: "INVALID_JOB_POSTING_ID",
+                jobPostingId: rawJobPostingId,
+            });
+
+            continue;
+        }
+
+        if (jobPostingIdSet.has(jobPostingIdNumber)) {
+            skippedItems.push({
+                index,
+                reason: "DUPLICATED_JOB_POSTING_ID",
+                jobPostingId: jobPostingIdNumber,
+            });
+
+            continue;
+        }
+
+        jobPostingIdSet.add(jobPostingIdNumber);
+
+        const itemAnalysisStage = pick(
+            item,
+            ["analysisStage", "analysis_stage"],
+            analysisStage
+        );
+
+        if (String(itemAnalysisStage).toUpperCase() !== String(analysisStage).toUpperCase()) {
             throw createError("추천 결과의 분석 단계가 요청 분석 단계와 다릅니다.", 502);
         }
 
-        const jobPostingId = parsePositiveInt(
-            pick(recommendation, ["jobPostingId", "job_posting_id"]),
-            "추천 결과의 공고 번호가 올바르지 않습니다."
-        );
-
-        if (jobPostingIdSet.has(jobPostingId)) {
-            throw createError("AI 추천 결과에 중복된 공고 번호가 있습니다.", 502);
-        }
-
-        jobPostingIdSet.add(jobPostingId);
-
-        const metrics = normalizeRadarMetrics(recommendation);
+        const metrics = normalizeRadarMetrics(item);
 
         const overallScoreValue = pick(
-            recommendation,
+            item,
             ["overallScore", "overall_score"]
         );
 
@@ -293,23 +279,32 @@ function normalizeRecommendationItems(aiRoot, analysisStage, recommendationLimit
             ? calculateOverallScore(metrics)
             : normalizeScore(overallScoreValue, "overall_score");
 
-        return {
-            companyId: pick(recommendation, ["companyId", "company_id"]),
-            jobPostingId,
+        analysisItems.push({
+            companyId: pick(item, ["companyId", "company_id"]),
+            jobPostingId: jobPostingIdNumber,
             analysisStage,
             recommendRank: parseOptionalPositiveInt(
-                pick(recommendation, ["recommendRank", "recommend_rank", "rank"]),
-                index + 1
+                pick(item, ["recommendRank", "recommend_rank", "rank"]),
+                analysisItems.length + 1
             ),
             overallScore,
             metrics,
-        };
-    });
-}
+        });
+    }
 
-/* =========================================================
-   AI 서버 호출
-   ========================================================= */
+    if (analysisItems.length === 0) {
+        throw createError("저장 가능한 AI 추천 결과가 없습니다.", 502);
+    }
+
+    if (analysisItems.length > recommendationLimit) {
+        throw createError("AI 추천 결과 개수가 요청한 recommendation_limit보다 많습니다.", 502);
+    }
+
+    return {
+        analysisItems,
+        skippedItems,
+    };
+}
 
 async function requestResumeAnalysisToAi(payload) {
     const path =
@@ -324,18 +319,17 @@ async function requestResumeAnalysisToAi(payload) {
         const response = await aiClient.post(
             path,
             payload,
-            {
-                timeout,
-            }
+            { timeout }
         );
 
-        return response.data.data || response.data;
+        return response.data;
 
     } catch (error) {
-        console.error(
-            "[AI RESUME ANALYSIS ERROR]",
-            error.response?.data || error.message
-        );
+        console.error("[AI RESUME ANALYSIS ERROR]", {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message,
+        });
 
         throw createError(
             "AI 서버 이력서 분석 요청에 실패했습니다.",
@@ -344,26 +338,9 @@ async function requestResumeAnalysisToAi(payload) {
     }
 }
 
-/* =========================================================
-   외부 공개 함수
-   ========================================================= */
-
-/**
- * 이력서 상세 데이터 기반 기업 추천 분석 요청 + 저장
- *
- * 책임:
- * - FastAPI 호출
- * - AI 추천 결과 N개 저장
- * - 추천 결과별 방사형 지표 5개 저장
- *
- * 금지:
- * - RESUME 원본 조회
- * - RESUME 원본 생성/수정/삭제
- * - GitHub 저장소 생성/수정/삭제
- */
 async function analyzeAndSave({
     resumeId,
-    analysisStage,
+    analysisStage = "RESUME",
     recommendationLimit = MAX_RECOMMENDATION_LIMIT,
     resumeDetail,
 }) {
@@ -371,12 +348,13 @@ async function analyzeAndSave({
         throw createError("AI 분석에 사용할 이력서 상세 데이터가 없습니다.", 500);
     }
 
+    const normalizedAnalysisStage = String(analysisStage).toUpperCase();
     const normalizedRecommendationLimit =
         normalizeRecommendationLimit(recommendationLimit);
 
     const aiPayload = {
         resume_id: resumeId,
-        analysis_stage: analysisStage,
+        analysis_stage: normalizedAnalysisStage,
         recommendation_limit: normalizedRecommendationLimit,
         resume: resumeDetail,
     };
@@ -393,7 +371,7 @@ async function analyzeAndSave({
         const savedResult = await saveAiAnalysisResult({
             conn,
             resumeId,
-            analysisStage,
+            analysisStage: normalizedAnalysisStage,
             recommendationLimit: normalizedRecommendationLimit,
             aiResult,
         });
@@ -405,7 +383,7 @@ async function analyzeAndSave({
             message: "AI 기업 추천 분석 결과 저장 완료",
             data: {
                 resumeId,
-                analysisStage,
+                analysisStage: normalizedAnalysisStage,
                 recommendationLimit: normalizedRecommendationLimit,
                 savedResult,
                 aiResult,
@@ -421,10 +399,6 @@ async function analyzeAndSave({
     }
 }
 
-/* =========================================================
-   분석 결과 저장
-   ========================================================= */
-
 async function saveAiAnalysisResult({
     conn,
     resumeId,
@@ -435,22 +409,13 @@ async function saveAiAnalysisResult({
     const aiRoot = unwrapAiResult(aiResult);
 
     validateAiResumeId(aiRoot, resumeId);
-    validateAiAnalysisStage(aiRoot, analysisStage);
 
-    const recommendations = normalizeRecommendationItems(
+    const { analysisItems, skippedItems } = normalizeAnalysisItems(
         aiRoot,
         analysisStage,
         recommendationLimit
     );
 
-    /*
-     * 같은 이력서 + 같은 분석단계의 기존 추천 결과 삭제
-     *
-     * 예:
-     * - 기존 추천 3개 저장됨
-     * - 재분석 후 추천 20개 반환
-     * - 기존 3개 삭제 후 20개 새로 저장
-     */
     await analysisRepository.deleteRecommendationResultsByResumeStage(
         {
             resumeId,
@@ -462,27 +427,21 @@ async function saveAiAnalysisResult({
     const savedRecommendations = [];
     let savedMetricCount = 0;
 
-    for (const recommendation of recommendations) {
-        /*
-         * 추천 공고 1개당 COMPANY_RECOMMENDATION 1건 생성
-         */
+    for (const analysisItem of analysisItems) {
         const recommendationId =
             await analysisRepository.createCompanyRecommendation(
                 {
                     resumeId,
-                    jobPostingId: recommendation.jobPostingId,
-                    analysisStage: recommendation.analysisStage,
-                    overallScore: recommendation.overallScore,
+                    jobPostingId: analysisItem.jobPostingId,
+                    analysisStage: analysisItem.analysisStage,
+                    overallScore: analysisItem.overallScore,
                     latestInterviewId: null,
-                    recommendRank: recommendation.recommendRank,
+                    recommendRank: analysisItem.recommendRank,
                 },
                 conn
             );
 
-        /*
-         * 추천 공고 1개당 RECOMMENDATION_METRIC_DETAIL 5건 생성
-         */
-        for (const metric of recommendation.metrics) {
+        for (const metric of analysisItem.metrics) {
             await analysisRepository.createRecommendationMetricDetail(
                 {
                     recommendationId,
@@ -498,11 +457,11 @@ async function saveAiAnalysisResult({
 
         savedRecommendations.push({
             recommendationId,
-            companyId: recommendation.companyId,
-            jobPostingId: recommendation.jobPostingId,
-            recommendRank: recommendation.recommendRank,
-            overallScore: recommendation.overallScore,
-            metricCount: recommendation.metrics.length,
+            companyId: analysisItem.companyId,
+            jobPostingId: analysisItem.jobPostingId,
+            recommendRank: analysisItem.recommendRank,
+            overallScore: analysisItem.overallScore,
+            metricCount: analysisItem.metrics.length,
         });
     }
 
@@ -510,8 +469,10 @@ async function saveAiAnalysisResult({
         savedCount: {
             companyRecommendations: savedRecommendations.length,
             recommendationMetrics: savedMetricCount,
+            skippedItems: skippedItems.length,
         },
         recommendations: savedRecommendations,
+        skippedItems,
     };
 }
 
