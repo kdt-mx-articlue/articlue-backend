@@ -41,3 +41,10 @@ temp/
 
 # 기타
 coverage/
+
+# Playwright Chrome Profile
+browser/chrome-profile/
+
+# Playwright
+playwright-report/
+test-results/
