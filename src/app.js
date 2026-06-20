@@ -15,7 +15,8 @@ const authRoutes = require("./routes/auth.route.js");
 const memberRoutes = require("./routes/member.route.js");
 const resumeRoutes = require("./routes/resume.route.js")
 const githubRoutes = require("./routes/github.route.js");
-
+const interviewRoutes = require("./routes/interview.route.js");
+const jobPostingRotes = require("./routes/jobPosting.route.js");
 
 const app = express();
 
@@ -33,6 +34,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/resumes", resumeRoutes);
 // app.use("/api/member", memberRoutes);
 app.use("/api/github", githubRoutes);
+app.use("/api/interviews", interviewRoutes);
+app.use("/api/job-postings", jobPostingRotes);
 app.use("/api/test", testRoutes);
 
 // 서버 실행
