@@ -63,4 +63,52 @@ async function login(req, res) {
 
 }
 
-module.exports = { signup, login };
+// 카카오 로그인
+async function kakaoLogin(req, res) {
+
+    try {
+
+        const result =
+            await authService.kakaoLogin(
+                req.body.code
+            );
+
+        return res.status(200).json({
+            success: true,
+            message: "카카오 로그인 성공",
+            data: result
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(
+            error.statusCode || 500
+        ).json({
+            success: false,
+            message:
+                error.message || "서버 오류"
+        });
+    }
+}
+
+// 네이버 로그인
+async function naverLogin(req, res, next) {
+
+    try {
+
+        const result =
+            await authService.naverLogin(
+                req.query.code,
+                req.query.state
+            );
+
+        res.json(result);
+
+    } catch (error) {
+        next(error);
+    }
+}
+
+module.exports = { signup, login, kakaoLogin, naverLogin };

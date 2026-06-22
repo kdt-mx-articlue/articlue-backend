@@ -60,6 +60,18 @@ const env = {
         apiVersion: process.env.GITHUB_API_VERSION || "2022-11-28",
     },
 
+    kakao: {
+        restApiKey: requireEnv("KAKAO_REST_API_KEY"),
+        redirectUri: requireEnv("KAKAO_REDIRECT_URI"),
+        clientSecret: requireEnv("KAKAO_CLIENT_SECRET"),
+    },   
+
+    naver: {
+        clientId: process.env.NAVER_CLIENT_ID,
+        clientSecret: process.env.NAVER_CLIENT_SECRET,
+        redirectUri: process.env.NAVER_REDIRECT_URI,
+    },
+
     oracle: {
         user: requireEnv("ORACLE_USER"),
         password: requireEnv("ORACLE_PASSWORD"),
