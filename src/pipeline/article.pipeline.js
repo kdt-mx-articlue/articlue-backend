@@ -1,15 +1,15 @@
 const crypto = require('crypto');
 
 // 의존성 모듈 로드
-const { crawlList, crawlArticle, closeBrowser } = require('../crawler/dbr.crawler');
+const { crawlList, crawlArticle } = require('../crawler/dbr.crawler');
 const { cleanBody } = require('../services/articleFilter.service');
 const storageUtil = require('../utils/articleStorage.util');
 
 // 후속 단계 서비스 (향후 구현 시 주석 해제)
-// const articleSummaryService = require('../services/articleSummary.service');
-// const articleKeywordService = require('../services/articleKeyword.service');
-// const articleTrendService = require('../services/articleTrend.service');
-// const promptContextService = require('../services/promptContext.service');
+const articleSummaryService = require('../services/articleSummary.service');
+const articleKeywordService = require('../services/articleKeyword.service');
+const articleTrendService = require('../services/articleTrend.service');
+const promptContextService = require('../services/promptContext.service');
 
 function getArchiveFileName(publishedAtStr) {
     if (!publishedAtStr || !publishedAtStr.includes('.')) {
@@ -116,7 +116,7 @@ async function runStep4() {
     }
 
     // const stage4Data = await articleSummaryService.generate(stage3Data);
-    const stage4Data = stage3Data.map(a => ({ ...a, summary: "[Mock] LLM 기사 요약" }));
+    const stage4Data = await articleSummaryService.generate(stage3Data);
     
     await storageUtil.saveStaging('stage4_summary.json', stage4Data);
     return stage4Data;
@@ -131,7 +131,7 @@ async function runStep5() {
     if (!articles || articles.length === 0) throw new Error("Stage 4 데이터가 없습니다.");
 
     // const keywords = await articleKeywordService.extract(articles);
-    const stage5Data = { "AI": 5, "DT": 3 }; 
+    const stage5Data = await articleKeywordService.generate(articles);
     
     // 오직 자신의 결과물만 저장
     await storageUtil.saveStaging('stage5_keywords.json', stage5Data);
@@ -148,7 +148,11 @@ async function runStep6() {
     if (!articles || !keywords) throw new Error("이전 단계 데이터가 없습니다.");
 
     // const trends = await articleTrendService.generate(articles, keywords);
-    const stage6Data = [ { trendId: 1, topic: "[Mock] 비즈니스 트렌드" } ];
+    const stage6Data =
+        await articleTrendService.generate(
+            articles,
+            keywords.keywords
+        );
     
     await storageUtil.saveStaging('stage6_trends.json', stage6Data);
     return stage6Data;
@@ -164,7 +168,11 @@ async function runStep7() {
     if (!articles || !trends) throw new Error("이전 단계 데이터가 없습니다.");
 
     // const promptContext = await promptContextService.create(articles, trends);
-    const stage7Data = { contextId: "ctx", rawText: "[Mock] 프롬프트 컨텍스트" };
+    const stage7Data =
+        await promptContextService.generate(
+            articles,
+            trends.trends
+        );
     
     await storageUtil.saveStaging('stage7_prompt.json', stage7Data);
     return stage7Data;
@@ -193,7 +201,7 @@ async function runStep8() {
     if (promptContext) await storageUtil.saveCurrent('today_prompt_context.json', promptContext);
 
     // Archive 저장 (고유 ID 기반 중복 제거)
-    const archiveFileName = getArchiveFileName(articles[0].publishedAt);
+    const archiveFileName = getArchiveFileName(articles[0]?.publishedAt);
     const existingArchive = await storageUtil.loadArchive(archiveFileName) || [];
     
     const merged = [...existingArchive, ...articles];
@@ -221,8 +229,6 @@ async function runPipeline(limit = 5) {
     } catch (error) {
         console.error(`\n[Pipeline Error] 파이프라인 예외 발생: ${error.message}`);
         throw error;
-    } finally {
-        await closeBrowser();
     }
 }
 
@@ -244,8 +250,6 @@ async function resumePipeline(startStep = 4, limit = 5) {
     } catch (error) {
         console.error(`\n[Pipeline Error] 복구 가동 중 예외 발생: ${error.message}`);
         throw error;
-    } finally {
-        await closeBrowser();
     }
 }
 
