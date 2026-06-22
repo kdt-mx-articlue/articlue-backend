@@ -1,10 +1,9 @@
 const { oracledb } = require("../config/db");
 
 /**
- * 1. 이력서 생성
+ * 이력서 생성
  */
 async function createResume(resume, conn) {
-
     const sql = `
         INSERT INTO RESUME
         (
@@ -29,7 +28,7 @@ async function createResume(resume, conn) {
             'N',
             SYSDATE,
             SYSDATE
-        )   
+        )
         RETURNING RESUME_ID INTO :resumeId
     `;
 
@@ -40,11 +39,10 @@ async function createResume(resume, conn) {
             resumeTitle: resume.resumeTitle,
             desiredJob: resume.desiredJob,
             introduction: resume.introduction,
-
             resumeId: {
-                dir: oracledb.BIND_OUT, // BIND_OUT
-                type: oracledb.NUMBER  // NUMBER
-            }
+                dir: oracledb.BIND_OUT,
+                type: oracledb.NUMBER,
+            },
         }
     );
 
@@ -54,12 +52,7 @@ async function createResume(resume, conn) {
 /**
  * 희망지역 생성
  */
-async function createDesiredLocation(
-    location,
-    resumeId,
-    conn
-) {
-
+async function createDesiredLocation(location, resumeId, conn) {
     const sql = `
         INSERT INTO RESUME_DESIRED_LOCATION
         (
@@ -79,20 +72,15 @@ async function createDesiredLocation(
         sql,
         {
             resumeId,
-            locationName: location.locationName
+            locationName: location.locationName,
         }
     );
 }
 
 /**
- * 2. 학력생성
+ * 학력 생성
  */
-async function createEducation(
-    education,
-    resumeId,
-    conn
-) {
-
+async function createEducation(education, resumeId, conn) {
     const sql = `
         INSERT INTO EDUCATION
         (
@@ -126,24 +114,19 @@ async function createEducation(
             resumeId,
             schoolType: education.schoolType,
             schoolName: education.schoolName,
-            major: education.major,
-            graduationStatus: education.graduationStatus,
-            gpa: education.gpa,
-            startYm: education.startYm,
-            endYm: education.endYm
+            major: education.major || null,
+            graduationStatus: education.graduationStatus || null,
+            gpa: education.gpa || null,
+            startYm: education.startYm || null,
+            endYm: education.endYm || null,
         }
     );
 }
 
 /**
- * 3. 활동경험생성
+ * 활동경험 생성
  */
-async function createExperience(
-    experience,
-    resumeId,
-    conn
-) {
-
+async function createExperience(experience, resumeId, conn) {
     const sql = `
         INSERT INTO EXPERIENCE
         (
@@ -171,20 +154,93 @@ async function createExperience(
             resumeId,
             experienceType: experience.experienceType,
             experienceName: experience.experienceName,
-            startYm: experience.startYm,
-            endYm: experience.endYm
+            startYm: experience.startYm || null,
+            endYm: experience.endYm || null,
         }
     );
 }
 
 /**
- * 4. 자기소개서생성
+ * 경력사항 생성
  */
-async function createCoverLetter(
-    resumeId,
-    conn
-) {
+async function createCareer(career, resumeId, conn) {
+    const sql = `
+        INSERT INTO CAREER
+        (
+            CAREER_ID,
+            RESUME_ID,
+            COMPANY_NAME,
+            DEPARTMENT,
+            POSITION,
+            START_YM,
+            END_YM,
+            MAIN_ACHIEVEMENT
+        )
+        VALUES
+        (
+            SEQ_CAREER.NEXTVAL,
+            :resumeId,
+            :companyName,
+            :department,
+            :position,
+            :startYm,
+            :endYm,
+            :mainAchievement
+        )
+    `;
 
+    return await conn.execute(
+        sql,
+        {
+            resumeId,
+            companyName: career.companyName,
+            department: career.department || null,
+            position: career.position || null,
+            startYm: career.startYm || null,
+            endYm: career.endYm || null,
+            mainAchievement: career.mainAchievement || null,
+        }
+    );
+}
+
+/**
+ * 자격증 생성
+ */
+async function createCertificate(certificate, resumeId, conn) {
+    const sql = `
+        INSERT INTO CERTIFICATE
+        (
+            CERTIFICATE_ID,
+            RESUME_ID,
+            CERTIFICATE_NAME,
+            ACQUIRED_YM,
+            ISSUER
+        )
+        VALUES
+        (
+            SEQ_CERTIFICATE.NEXTVAL,
+            :resumeId,
+            :certificateName,
+            :acquiredYm,
+            :issuer
+        )
+    `;
+
+    return await conn.execute(
+        sql,
+        {
+            resumeId,
+            certificateName: certificate.certificateName,
+            acquiredYm: certificate.acquiredYm || null,
+            issuer: certificate.issuer || null,
+        }
+    );
+}
+
+/**
+ * 자기소개서 생성
+ */
+async function createCoverLetter(resumeId, conn) {
     const sql = `
         INSERT INTO COVER_LETTER
         (
@@ -207,26 +263,20 @@ async function createCoverLetter(
         sql,
         {
             resumeId,
-
             coverLetterId: {
                 dir: oracledb.BIND_OUT,
-                type: oracledb.NUMBER
-            }
+                type: oracledb.NUMBER,
+            },
         }
     );
-    
+
     return result.outBinds.coverLetterId[0];
 }
 
 /**
  * 자기소개서 문항 생성
  */
-async function createCoverLetterItem(
-    item,
-    coverLetterId,
-    conn
-) {
-
+async function createCoverLetterItem(item, coverLetterId, conn) {
     const sql = `
         INSERT INTO COVER_LETTER_ITEM
         (
@@ -256,55 +306,15 @@ async function createCoverLetterItem(
             coverLetterId,
             questionOrder: item.questionOrder,
             subTitle: item.subTitle,
-            content: item.content
+            content: item.content,
         }
     );
 }
 
 /**
- * 기술스택 생성
+ * 포트폴리오 생성
  */
-async function createResumeTechStack(
-    tech,
-    resumeId,
-    conn
-) {
-
-    const sql = `
-        INSERT INTO RESUME_TECH_STACK
-        (
-            RESUME_TECH_ID,
-            RESUME_ID,
-            TECH_CATEGORY_CODE,
-            CREATE_AT
-        )
-        VALUES
-        (
-            SEQ_RESUME_TECH_STACK.NEXTVAL,
-            :resumeId,
-            :techCategoryCode,
-            SYSDATE
-        )
-    `;
-
-    return await conn.execute(
-        sql,
-        {
-            resumeId,
-            techCategoryCode: tech.techCategoryCode
-        }
-    );
-}
-
-/**
- * 5. 포트폴리오생성
- */
-async function createPortfolio(
-    portfolio,
-    resumeId,
-    conn
-) {
-
+async function createPortfolio(portfolio, resumeId, conn) {
     const sql = `
         INSERT INTO PORTFOLIO_FILE
         (
@@ -341,36 +351,29 @@ async function createPortfolio(
             fileExtension: portfolio.fileExtension,
             filePath: portfolio.filePath,
             fileSize: portfolio.fileSize,
-            fileStatus: portfolio.fileStatus
+            fileStatus: portfolio.fileStatus,
         }
     );
 }
 
 /**
- * 6. 자격증생성
+ * 이력서 기술스택 생성
  */
-async function createCertificate(
-    certificate,
-    resumeId,
-    conn
-) {
-
+async function createResumeTechStack(tech, resumeId, conn) {
     const sql = `
-        INSERT INTO CERTIFICATE
+        INSERT INTO RESUME_TECH_STACK
         (
-            CERTIFICATE_ID,
+            RESUME_TECH_ID,
             RESUME_ID,
-            CERTIFICATE_NAME,
-            ACQUIRED_YM,
-            ISSUER
+            TECH_CATEGORY_CODE,
+            CREATE_AT
         )
         VALUES
         (
-            SEQ_CERTIFICATE.NEXTVAL,
+            SEQ_RESUME_TECH_STACK.NEXTVAL,
             :resumeId,
-            :certificateName,
-            :acquiredYm,
-            :issuer
+            :techCategoryCode,
+            SYSDATE
         )
     `;
 
@@ -378,66 +381,17 @@ async function createCertificate(
         sql,
         {
             resumeId,
-            certificateName: certificate.certificateName,
-            acquiredYm: certificate.acquiredYm,
-            issuer: certificate.issuer
+            techCategoryCode: tech.techCategoryCode,
         }
     );
 }
 
 /**
- * 7. 경력사항생성
- */
-async function createCareer(
-    career,
-    resumeId,
-    conn
-) {
-
-    const sql = `
-        INSERT INTO CAREER
-        (
-            CAREER_ID,
-            RESUME_ID,
-            COMPANY_NAME,
-            DEPARTMENT,
-            POSITION,
-            START_YM,
-            END_YM,
-            MAIN_ACHIEVEMENT
-        )
-        VALUES
-        (
-            SEQ_CAREER.NEXTVAL,
-            :resumeId,
-            :companyName,
-            :department,
-            :position,
-            :startYm,
-            :endYm,
-            :mainAchievement
-        )
-    `;
-
-    return await conn.execute(
-        sql,
-        {
-            resumeId,
-            companyName: career.companyName,
-            department: career.department,
-            position: career.position,
-            startYm: career.startYm,
-            endYm: career.endYm,
-            mainAchievement: career.mainAchievement
-        }
-    );
-}
-
-/**
- * 특정 이력서 전체 조회
- * - 이력서 ID 기준
- * - 전체 테이블 LEFT JOIN 한 번으로 조회
- * - service에서 중복 row 정리
+ * 특정 이력서 전체 상세 조회
+ *
+ * 주의:
+ * - GitHub 저장소 최종 명세에는 PUSHED_AT이 없으므로 NULL AS GITHUB_PUSHED_AT으로 맞춘다.
+ * - service의 buildResumeDetail() 구조를 유지하기 위한 alias다.
  */
 async function getResumeDetail(resumeId, conn) {
     const sql = `
@@ -607,7 +561,12 @@ async function getResumeDetail(resumeId, conn) {
             GCD.COMMIT_DATE DESC
     `;
 
-    const result = await conn.execute(sql, { resumeId });
+    const result = await conn.execute(
+        sql,
+        {
+            resumeId,
+        }
+    );
 
     return result.rows;
 }
@@ -619,12 +578,12 @@ module.exports = {
     createEducation,
     createExperience,
     createCareer,
+    createCertificate,
     createCoverLetter,
     createCoverLetterItem,
-    createResumeTechStack,
     createPortfolio,
-    createCertificate,
-
+    createResumeTechStack,
+    
     // 조회
     getResumeDetail,
 };
