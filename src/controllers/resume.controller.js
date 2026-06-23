@@ -3,7 +3,21 @@ const resumeService = require('../services/resume.service');
 // 이력서 생성
 async function createResume(req, res) {
     try {
-        const result = await resumeService.createResume(req.body);
+        console.log("[RESUME CTRL] 요청 시작");
+        console.log("[RESUME CTRL] body.memberId:", req.body.memberId || req.body.member_id);
+        console.log("[RESUME CTRL] body.resumeTitle:", req.body.resumeTitle || req.body.resume_title);
+        console.time("[RESUME CTRL] total");
+
+        const result = await resumeService.createResumeAndAnalyze(req.body);
+
+        console.timeEnd("[RESUME CTRL] total");
+        console.log("[RESUME CTRL] 최종 응답 message:", result.message);
+        console.log("[RESUME CTRL] 최종 응답 resumeId:", result.data?.resumeId);
+        console.log("[RESUME CTRL] analysisStatus:", result.data?.analysisStatus);
+        console.log(
+            "[RESUME CTRL] savedCount:",
+            JSON.stringify(result.data?.analysis?.savedResult?.savedCount, null, 2)
+        );
 
         return res.status(200).json({
             success: true,
