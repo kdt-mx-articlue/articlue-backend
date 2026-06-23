@@ -78,12 +78,13 @@ async function login(req, res) {
  */
 async function issueToken(req, res) {
     try {
+
         const deviceCode =
             req.body?.deviceCode ||
             req.body?.device_code;
 
         const result = await githubService.issueToken(deviceCode);
-
+        console.log(result);
         /**
          * 아직 사용자가 GitHub 인증 페이지에서 승인을 완료하지 않은 상태
          */
