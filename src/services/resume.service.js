@@ -571,11 +571,10 @@ async function findStoredGithubRepositoriesForResume({
         );
     }
 
+    // GitHub 미연동 시 빈 배열 반환 (에러 X)
     if (!repositories || repositories.length === 0) {
-        throw createError(
-            "연동된 GitHub 저장소가 없습니다. 먼저 GitHub 연동을 완료해주세요.",
-            400
-        );
+        console.warn(`[RESUME] memberId=${memberId} GitHub 저장소 없음, 스킵`);
+        return [];
     }
 
     return repositories.map((repository, index) => ({
@@ -631,13 +630,7 @@ async function linkStoredGithubRepositoriesToResume({
         }
     }
 
-    if (result.linkedRepositoryCount === 0) {
-        throw createError(
-            "이력서에 연결된 GitHub 저장소가 없습니다.",
-            400
-        );
-    }
-
+    // GitHub 없어도 에러 X, 그냥 0으로 반환
     return result;
 }
 
@@ -781,10 +774,8 @@ function assertResumeDetailHasGithub(resumeDetail) {
         !Array.isArray(resumeDetail.githubRepositories) ||
         resumeDetail.githubRepositories.length === 0
     ) {
-        throw createError(
-            "AI 분석에 사용할 GitHub 저장소 정보가 없습니다. 이력서에 GitHub 저장소를 연결해주세요.",
-            400
-        );
+        console.warn("[RESUME] GitHub 저장소 없이 AI 분석 진행합니다.");
+        // throw 제거
     }
 }
 

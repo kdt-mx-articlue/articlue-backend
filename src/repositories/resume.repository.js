@@ -62,7 +62,7 @@ async function createDesiredLocation(location, resumeId, conn) {
         )
         VALUES
         (
-            SEQ_RESUME_LOCATION.NEXTVAL,
+            SEQ_RESUME_DESIRED_LOCATION.NEXTVAL ,
             :resumeId,
             :locationName
         )
@@ -493,7 +493,7 @@ async function getResumeDetail(resumeId, conn) {
             GR.DEFAULT_BRANCH AS DEFAULT_BRANCH,
             GR.CREATED_AT AS GITHUB_CREATED_AT,
             GR.UPDATED_AT AS GITHUB_UPDATED_AT,
-            GR.PUSHED_AT AS GITHUB_PUSHED_AT,
+            NULL AS GITHUB_PUSHED_AT,
             GR.LAST_SYNC_AT AS GITHUB_LAST_SYNC_AT,
 
             GRTS.GITHUB_REPO_TECH_ID AS GITHUB_REPO_TECH_ID,
