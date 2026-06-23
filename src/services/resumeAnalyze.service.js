@@ -1,7 +1,15 @@
 const { getConnection } = require("../config/db");
-const aiClient = require("../config/ai.config");
+const aiConfig = require("../config/ai.config");
 const analysisRepository = require("../repositories/resumeAnalysis.repository");
 const { createError } = require("../utils/error.util");
+
+/*
+ * ai.config.js export 방식이
+ * 1) module.exports = aiClient
+ * 2) module.exports = { aiClient }
+ * 둘 중 무엇이든 동작하게 처리합니다.
+ */
+const aiClient = aiConfig.aiClient || aiConfig;
 
 const RADAR_METRIC_TYPES = [
     "business_fit",
@@ -29,6 +37,40 @@ function pick(target, fieldNames, defaultValue = null) {
     }
 
     return defaultValue;
+}
+
+/*
+ * FastAPI / Python 쪽에서 None이 join에 들어가면 아래 오류가 발생합니다.
+ *
+ * TypeError: sequence item 0: expected str instance, NoneType found
+ *
+ * Node JSON의 null은 Python에서 None이 되므로,
+ * AI 서버로 보내기 전에 null / undefined를 빈 문자열로 정리합니다.
+ */
+function replaceNullWithEmptyString(value) {
+    if (value === null || value === undefined) {
+        return "";
+    }
+
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => replaceNullWithEmptyString(item));
+    }
+
+    if (typeof value === "object") {
+        const result = {};
+
+        for (const [key, childValue] of Object.entries(value)) {
+            result[key] = replaceNullWithEmptyString(childValue);
+        }
+
+        return result;
+    }
+
+    return value;
 }
 
 function requireText(value, message) {
@@ -230,7 +272,51 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
     for (let index = 0; index < jobMatches.length; index++) {
         const item = jobMatches[index];
 
-        const rawJobPostingId = pick(item, ["jobPostingId", "job_posting_id"]);
+        /*
+         * AI 응답 구조 대응
+         *
+         * 현재 AI는 아래 구조로 반환함:
+         * {
+         *   job_posting_id: 17,
+         *   analysis: {
+         *     type: "RESUME",
+         *     overall_score: 20.9,
+         *     metrics: { ... }
+         *   }
+         * }
+         *
+         * 기존 백엔드는 item.metrics를 기대했기 때문에
+         * item.analysis.metrics도 같이 처리해야 함.
+         */
+        const nestedAnalysis =
+            item.analysis && typeof item.analysis === "object"
+                ? item.analysis
+                : {};
+
+        const normalizedItem = {
+            ...item,
+            analysisStage:
+                item.analysisStage ||
+                item.analysis_stage ||
+                nestedAnalysis.analysisStage ||
+                nestedAnalysis.analysis_stage ||
+                nestedAnalysis.type ||
+                analysisStage,
+            overallScore:
+                item.overallScore ||
+                item.overall_score ||
+                nestedAnalysis.overallScore ||
+                nestedAnalysis.overall_score,
+            metrics:
+                item.metrics ||
+                nestedAnalysis.metrics,
+        };
+
+        const rawJobPostingId = pick(
+            normalizedItem,
+            ["jobPostingId", "job_posting_id"]
+        );
+
         const jobPostingIdNumber = Number(rawJobPostingId);
 
         if (
@@ -259,19 +345,22 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
         jobPostingIdSet.add(jobPostingIdNumber);
 
         const itemAnalysisStage = pick(
-            item,
+            normalizedItem,
             ["analysisStage", "analysis_stage"],
             analysisStage
         );
 
-        if (String(itemAnalysisStage).toUpperCase() !== String(analysisStage).toUpperCase()) {
+        if (
+            String(itemAnalysisStage).toUpperCase() !==
+            String(analysisStage).toUpperCase()
+        ) {
             throw createError("추천 결과의 분석 단계가 요청 분석 단계와 다릅니다.", 502);
         }
 
-        const metrics = normalizeRadarMetrics(item);
+        const metrics = normalizeRadarMetrics(normalizedItem);
 
         const overallScoreValue = pick(
-            item,
+            normalizedItem,
             ["overallScore", "overall_score"]
         );
 
@@ -280,11 +369,11 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
             : normalizeScore(overallScoreValue, "overall_score");
 
         analysisItems.push({
-            companyId: pick(item, ["companyId", "company_id"]),
+            companyId: pick(normalizedItem, ["companyId", "company_id"]),
             jobPostingId: jobPostingIdNumber,
             analysisStage,
             recommendRank: parseOptionalPositiveInt(
-                pick(item, ["recommendRank", "recommend_rank", "rank"]),
+                pick(normalizedItem, ["recommendRank", "recommend_rank", "rank"]),
                 analysisItems.length + 1
             ),
             overallScore,
@@ -307,15 +396,29 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
 }
 
 async function requestResumeAnalysisToAi(payload) {
+    /*
+     * 현재 FastAPI 라우터:
+     * @router.post("/pipeline/analyze")
+     *
+     * main.py에서 prefix="/api" 없이 등록했다면:
+     * /pipeline/analyze
+     */
     const path =
         process.env.AI_RESUME_ANALYSIS_PATH ||
-        "/api/ai/resumes/analyze";
+        "/pipeline/analyze";
 
     const timeout =
         Number(process.env.AI_RESUME_ANALYSIS_TIMEOUT_MS) ||
         120000;
 
     try {
+        console.log("[AI REQUEST TARGET]", {
+            baseURL: aiClient.defaults?.baseURL,
+            path,
+            timeout,
+            aiClientPostType: typeof aiClient.post,
+        });
+
         const response = await aiClient.post(
             path,
             payload,
@@ -352,12 +455,29 @@ async function analyzeAndSave({
     const normalizedRecommendationLimit =
         normalizeRecommendationLimit(recommendationLimit);
 
+    /*
+     * FastAPI PipelineRequest 구조:
+     *
+     * class PipelineRequest(BaseModel):
+     *     success: bool
+     *     message: str
+     *     data: Dict[str, Any]
+     *
+     * 그래서 resume_id / resume 형태가 아니라
+     * success / message / data 형태로 보내야 합니다.
+     */
+    const sanitizedResumeDetail = replaceNullWithEmptyString(resumeDetail);
+
     const aiPayload = {
-        resume_id: resumeId,
-        analysis_stage: normalizedAnalysisStage,
-        recommendation_limit: normalizedRecommendationLimit,
-        resume: resumeDetail,
+        success: true,
+        message: "이력서 상세 조회 성공",
+        data: sanitizedResumeDetail,
     };
+
+    console.log(
+        "[AI PAYLOAD CHECK] projectDescriptions:",
+        sanitizedResumeDetail.githubRepositories?.map((repo) => repo.projectDescription)
+    );
 
     console.log("[AI REQUEST]", JSON.stringify(aiPayload, null, 2));
 
@@ -375,6 +495,9 @@ async function analyzeAndSave({
             recommendationLimit: normalizedRecommendationLimit,
             aiResult,
         });
+
+        console.log("[AI SAVE RESULT]", JSON.stringify(savedResult, null, 2));
+        console.log("[AI SAVE COUNT]", JSON.stringify(savedResult.savedCount, null, 2));
 
         await conn.commit();
 
