@@ -128,11 +128,9 @@ async function findGithubRepositoryId(conn, { github_account_id, id }) {
         SELECT
             GITHUB_REPOSITORY_ID AS "githubRepositoryId"
         FROM GITHUB_REPOSITORY
-        WHERE GITHUB_ACCOUNT_ID = :github_account_id
-          AND GITHUB_REPO_EXTERNAL_ID = :github_repo_external_id
+        WHERE GITHUB_REPO_EXTERNAL_ID = :github_repo_external_id
         `,
         {
-            github_account_id,
             github_repo_external_id: id,
         }
     );
@@ -199,7 +197,6 @@ async function insertGithubRepository(conn, row) {
     return result.outBinds.github_repository_id[0];
 }
 
-// ✅ PUSHED_AT 제거
 async function updateGithubRepository(conn, githubRepositoryId, row) {
     await conn.execute(
         `
@@ -266,7 +263,7 @@ async function insertGithubRepoTechStack(conn, row) {
             COLLECTED_AT
         )
         VALUES (
-            SEQ_GITHUB_REPO_TECH.NEXTVAL,
+            SEQ_GITHUB_REPO_TECH_STACK.NEXTVAL,
             :github_repository_id,
             :tech_category_code,
             :language_name,
@@ -311,7 +308,7 @@ async function insertGithubRepoCommitDaily(conn, row) {
             COLLECTED_AT
         )
         VALUES (
-            SEQ_GITHUB_COMMIT_DAILY.NEXTVAL,
+            SEQ_GITHUB_REPO_COMMIT_DAILY.NEXTVAL,
             :github_repository_id,
             :commit_date,
             :commit_count,
@@ -333,7 +330,6 @@ async function insertGithubRepoCommitDaily(conn, row) {
     return result.outBinds.github_repo_commit_daily_id[0];
 }
 
-// ✅ DESCRIPTION을 GROUP BY에서 제거하고 TO_CHAR로 SELECT
 async function findTopRepositories(memberId, conn) {
     const sql = `
         SELECT *
@@ -366,7 +362,6 @@ async function findTopRepositories(memberId, conn) {
     return result.rows;
 }
 
-// ✅ 동일하게 수정
 async function findAllRepositories(memberId, conn) {
     const sql = `
         SELECT
@@ -409,7 +404,7 @@ async function createResumeGithubRepository(conn, row) {
         )
         VALUES
         (
-            SEQ_RESUME_GITHUB_REPO.NEXTVAL,
+            SEQ_RESUME_GITHUB_REPOSITORY.NEXTVAL,
             :resume_id,
             :github_repository_id,
             :display_order,
