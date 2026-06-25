@@ -201,6 +201,7 @@ function normalizeExperience(item) {
             pick(item, ["experienceName", "experience_name", "projectName", "activityName", "name"]),
             "활동경험명 또는 프로젝트명을 입력하세요."
         ),
+        context: pick(item, ["context"]) ?? null,
         startYm: pick(item, ["startYm", "start_ym"]),
         endYm: pick(item, ["endYm", "end_ym"]),
     };
@@ -952,6 +953,7 @@ function buildResumeDetail(rows) {
                 experienceId: row.EXPERIENCE_ID,
                 experienceType: row.EXPERIENCE_TYPE,
                 experienceName: row.EXPERIENCE_NAME,
+                context: row.EXPERIENCE_CONTEXT ?? "",
                 startYm: row.EXPERIENCE_START_YM,
                 endYm: row.EXPERIENCE_END_YM,
             })
@@ -1143,9 +1145,36 @@ async function getResumeDetail(resumeIdValue) {
     }
 }
 
+/* =========================================================
+   추천 기업 조회
+   ===========================   ========================================================= */
+
+const resumeAnalysisRepository = require("../repositories/resumeAnalysis.repository");
+
+async function getResumeRecommendations(resumeIdValue, stage = "RESUME") {
+    const resumeId = parseResumeId(resumeIdValue);
+    const conn = await getConnection();
+
+    try {
+        const data = await resumeAnalysisRepository.findRecommendationsByResume(
+            conn,
+            resumeId,
+            stage
+        );
+
+        return {
+            success: true,
+            message: "추천 기업 조회 성공",
+            data,
+        };
+    } finally {
+        await conn.close();
+    }
+}
+
 module.exports = {
-    createResume,
     createResumeAndAnalyze,
     analyzeSavedResume,
     getResumeDetail,
+    getResumeRecommendations,
 };

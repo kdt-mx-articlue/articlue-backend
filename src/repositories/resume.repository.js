@@ -134,6 +134,7 @@ async function createExperience(experience, resumeId, conn) {
             RESUME_ID,
             EXPERIENCE_TYPE,
             EXPERIENCE_NAME,
+            CONTEXT,
             START_YM,
             END_YM
         )
@@ -143,6 +144,7 @@ async function createExperience(experience, resumeId, conn) {
             :resumeId,
             :experienceType,
             :experienceName,
+            :context,
             :startYm,
             :endYm
         )
@@ -154,6 +156,7 @@ async function createExperience(experience, resumeId, conn) {
             resumeId,
             experienceType: experience.experienceType,
             experienceName: experience.experienceName,
+            context: experience.context || null,
             startYm: experience.startYm || null,
             endYm: experience.endYm || null,
         }
@@ -435,6 +438,7 @@ async function getResumeDetail(resumeId, conn) {
             EX.EXPERIENCE_ID AS EXPERIENCE_ID,
             EX.EXPERIENCE_TYPE AS EXPERIENCE_TYPE,
             EX.EXPERIENCE_NAME AS EXPERIENCE_NAME,
+            EX.CONTEXT AS EXPERIENCE_CONTEXT,
             EX.START_YM AS EXPERIENCE_START_YM,
             EX.END_YM AS EXPERIENCE_END_YM,
 

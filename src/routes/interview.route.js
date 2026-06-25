@@ -17,6 +17,11 @@ const upload = multer({
  *
  * TEXT / VOICE 구분은 body.chatMode로 처리한다.
  */
+router.get(
+    "/sessions",
+    interviewController.getSessions
+);
+
 router.post(
     "/sessions",
     interviewController.startInterview
@@ -50,6 +55,17 @@ router.post(
 router.post(
     "/sessions/:interviewSessionId/finish",
     interviewController.finishInterview
+);
+
+
+router.get(
+    "/sessions/:interviewSessionId/history",
+    interviewController.getHistory
+);
+
+router.get(
+    "/sessions/:interviewSessionId/report",
+    interviewController.getReport
 );
 
 module.exports = router;
