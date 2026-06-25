@@ -24,7 +24,7 @@ async function signup(member, conn) {
             :nickname,
             'COMMON',
             SYSDATE,
-            NULL
+            SYSDATE
         )
         RETURNING MEMBER_ID INTO :memberId`;
 
@@ -126,7 +126,7 @@ async function signupSocial(member, conn) {
             :nickname,
             'COMMON',
             SYSDATE,
-            NULL
+            SYSDATE
         )
         RETURNING MEMBER_ID INTO :memberId
     `;

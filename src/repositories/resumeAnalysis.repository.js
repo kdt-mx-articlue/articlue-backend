@@ -171,8 +171,318 @@ async function createRecommendationMetricDetail(data, conn) {
     );
 }
 
+/**
+ * 이력서 기반 기업 추천 결과 조회
+ *
+ * COMPANY_RECOMMENDATION + RECOMMENDATION_METRIC_DETAIL + JOB_POSTING + COMPANY 조인
+ * 결과를 recommendationId 기준으로 그룹핑하여 반환
+ */
+async function findRecommendationsByResume(conn, resumeId, analysisStage) {
+    const sql = `
+        SELECT
+            cr.RECOMMENDATION_ID    AS "recommendationId",
+            cr.JOB_POSTING_ID       AS "jobPostingId",
+            cr.ANALYSIS_STAGE       AS "analysisStage",
+            cr.OVERALL_SCORE        AS "overallScore",
+            cr.RECOMMEND_RANK       AS "recommendRank",
+            rmd.METRIC_TYPE         AS "metricType",
+            rmd.SCORE               AS "metricScore",
+            rmd.REASON_TEXT         AS "reasonText"
+        FROM COMPANY_RECOMMENDATION cr
+        LEFT JOIN RECOMMENDATION_METRIC_DETAIL rmd ON cr.RECOMMENDATION_ID = rmd.RECOMMENDATION_ID
+        WHERE cr.RESUME_ID = :resumeId
+          AND cr.ANALYSIS_STAGE = :analysisStage
+        ORDER BY cr.RECOMMEND_RANK ASC NULLS LAST, cr.OVERALL_SCORE DESC NULLS LAST
+    `;
+
+    const result = await conn.execute(
+        sql,
+        { resumeId: Number(resumeId), analysisStage },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    // recommendationId 기준으로 그룹핑
+    const map = new Map();
+    for (const row of result.rows) {
+        const id = row.recommendationId;
+        if (!map.has(id)) {
+            map.set(id, {
+                recommendationId: id,
+                jobPostingId:     row.jobPostingId,
+                analysisStage:    row.analysisStage,
+                overallScore:     row.overallScore,
+                recommendRank:    row.recommendRank,
+                companyName:      row.companyName,
+                industryCategory: row.industryCategory,
+                jobName:          row.jobName,
+                careerCondition:  row.careerCondition,
+                originalUrl:      row.originalUrl,
+                deadlineDate:     row.deadlineDate,
+                metrics: {},
+            });
+        }
+        if (row.metricType) {
+            map.get(id).metrics[row.metricType] = {
+                score:      row.metricScore,
+                reasonText: row.reasonText,
+            };
+        }
+    }
+
+    return Array.from(map.values());
+}
+
+/**
+ * 이력서 + 특정 채용공고의 매칭 결과 단건 조회
+ *
+ * 관심 기업 클릭 시 해당 기업의 overallScore + metrics를 DB에서 조회해
+ * 카드에 표시하기 위해 사용합니다.
+ */
+async function findRecommendationByResumeAndJob(conn, resumeId, jobPostingId, analysisStage) {
+    const sql = `
+        SELECT
+            cr.RECOMMENDATION_ID    AS "recommendationId",
+            cr.JOB_POSTING_ID       AS "jobPostingId",
+            cr.ANALYSIS_STAGE       AS "analysisStage",
+            cr.OVERALL_SCORE        AS "overallScore",
+            cr.RECOMMEND_RANK       AS "recommendRank",
+            rmd.METRIC_TYPE         AS "metricType",
+            rmd.SCORE               AS "metricScore",
+            rmd.REASON_TEXT         AS "reasonText"
+        FROM COMPANY_RECOMMENDATION cr
+        LEFT JOIN RECOMMENDATION_METRIC_DETAIL rmd ON cr.RECOMMENDATION_ID = rmd.RECOMMENDATION_ID
+        WHERE cr.RESUME_ID = :resumeId
+          AND cr.JOB_POSTING_ID = :jobPostingId
+          AND cr.ANALYSIS_STAGE = :analysisStage
+        ORDER BY cr.OVERALL_SCORE DESC NULLS LAST
+    `;
+
+    const result = await conn.execute(
+        sql,
+        { resumeId: Number(resumeId), jobPostingId: Number(jobPostingId), analysisStage },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const first = result.rows[0];
+    const rec = {
+        recommendationId: first.recommendationId,
+        jobPostingId:     first.jobPostingId,
+        analysisStage:    first.analysisStage,
+        overallScore:     first.overallScore,
+        recommendRank:    first.recommendRank,
+        metrics: {},
+    };
+    for (const row of result.rows) {
+        if (row.recommendationId === rec.recommendationId && row.metricType) {
+            rec.metrics[row.metricType] = {
+                score:      row.metricScore,
+                reasonText: row.reasonText,
+            };
+        }
+    }
+    return rec;
+}
+
+
+async function createPortfolioDiagnosis(data, conn) {
+    const oracledb = require("oracledb");
+    const sql = `
+        INSERT INTO portfolio_diagnosis (
+            diagnosis_id,
+            resume_id,
+            job_posting_id,
+            diagnosis_summary,
+            tech_stack_weakness,
+            project_experience_weakness,
+            business_result_weakness,
+            domain_understanding_weakness,
+            improvement_priority,
+            diagnosis_date
+        ) VALUES (
+            SEQ_PORTFOLIO_DIAGNOSIS.NEXTVAL,
+            :resumeId,
+            :jobPostingId,
+            :diagnosisSummary,
+            :techStackWeakness,
+            :projectExperienceWeakness,
+            :businessResultWeakness,
+            :domainUnderstandingWeakness,
+            :improvementPriority,
+            SYSDATE
+        )
+    `;
+    await conn.execute(sql, {
+        resumeId:                    Number(data.resumeId),
+        jobPostingId:                Number(data.jobPostingId),
+        diagnosisSummary:            data.diagnosisSummary            ?? null,
+        techStackWeakness:           data.techStackWeakness           ?? null,
+        projectExperienceWeakness:   data.projectExperienceWeakness   ?? null,
+        businessResultWeakness:      data.businessResultWeakness      ?? null,
+        domainUnderstandingWeakness: data.domainUnderstandingWeakness ?? null,
+        improvementPriority:         data.improvementPriority         ?? null,
+    }, { autoCommit: false });
+
+    const idResult = await conn.execute(
+        `SELECT SEQ_PORTFOLIO_DIAGNOSIS.CURRVAL AS "diagnosisId" FROM DUAL`,
+        [],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return idResult.rows[0].diagnosisId;
+}
+
+async function createActionPlan(data, conn) {
+    const sql = `
+        INSERT INTO action_plan (
+            action_plan_id,
+            diagnosis_id,
+            action_plan_title,
+            action_plan_summary,
+            recommended_learning,
+            priority,
+            expected_period,
+            created_date
+        ) VALUES (
+            SEQ_ACTION_PLAN.NEXTVAL,
+            :diagnosisId,
+            :actionPlanTitle,
+            :actionPlanSummary,
+            :recommendedLearning,
+            :priority,
+            :expectedPeriod,
+            SYSDATE
+        )
+    `;
+    await conn.execute(sql, {
+        diagnosisId:        Number(data.diagnosisId),
+        actionPlanTitle:    data.actionPlanTitle,
+        actionPlanSummary:  data.actionPlanSummary   ?? null,
+        recommendedLearning: data.recommendedLearning ?? null,
+        priority:           data.priority             ?? null,
+        expectedPeriod:     data.expectedPeriod       ?? null,
+    }, { autoCommit: false });
+}
+
+async function createRecommendationAction(data, conn) {
+    const sql = `
+        INSERT INTO recommendation_action (
+            recommendation_action_id,
+            recommendation_id,
+            category,
+            title,
+            description,
+            type,
+            priority
+        ) VALUES (
+            SEQ_RECOMMENDATION_ACTION.NEXTVAL,
+            :recommendationId,
+            :category,
+            :title,
+            :description,
+            :type,
+            :priority
+        )
+    `;
+    await conn.execute(sql, {
+        recommendationId: Number(data.recommendationId),
+        category:         data.category    ?? 'ACTION',
+        title:            data.title,
+        description:      data.description ?? null,
+        type:             data.type,
+        priority:         data.priority    ?? null,
+    }, { autoCommit: false });
+}
+
+async function deletePortfolioDiagnosisByResumeJob(resumeId, jobPostingId, conn) {
+    await conn.execute(
+        `DELETE FROM action_plan WHERE diagnosis_id IN (
+            SELECT diagnosis_id FROM portfolio_diagnosis
+            WHERE resume_id = :resumeId AND job_posting_id = :jobPostingId
+        )`,
+        { resumeId: Number(resumeId), jobPostingId: Number(jobPostingId) },
+        { autoCommit: false }
+    );
+    await conn.execute(
+        `DELETE FROM portfolio_diagnosis WHERE resume_id = :resumeId AND job_posting_id = :jobPostingId`,
+        { resumeId: Number(resumeId), jobPostingId: Number(jobPostingId) },
+        { autoCommit: false }
+    );
+}
+
+async function deleteRecommendationActionsByRecommendationId(recommendationId, conn) {
+    await conn.execute(
+        `DELETE FROM recommendation_action WHERE recommendation_id = :recommendationId`,
+        { recommendationId: Number(recommendationId) },
+        { autoCommit: false }
+    );
+}
+
+async function findActionPlanByResumeJob(resumeId, jobPostingId, conn) {
+    const oracledb = require("oracledb");
+
+    // 1. portfolio_diagnosis (weakness 데이터)
+    const diagSql = `
+        SELECT * FROM (
+            SELECT
+                diagnosis_id                    AS "diagnosisId",
+                diagnosis_summary               AS "diagnosisSummary",
+                tech_stack_weakness             AS "techStackWeakness",
+                project_experience_weakness     AS "projectExperienceWeakness",
+                business_result_weakness        AS "businessResultWeakness",
+                domain_understanding_weakness   AS "domainUnderstandingWeakness",
+                improvement_priority            AS "improvementPriority"
+            FROM portfolio_diagnosis
+            WHERE resume_id = :resumeId AND job_posting_id = :jobPostingId
+            ORDER BY diagnosis_date DESC
+        ) WHERE ROWNUM = 1
+    `;
+    const diagResult = await conn.execute(
+        diagSql,
+        { resumeId: Number(resumeId), jobPostingId: Number(jobPostingId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const diagnosis = diagResult.rows[0] ?? null;
+
+    // 2. recommendation_action (stage별 액션 데이터)
+    const actionSql = `
+        SELECT
+            ra.recommendation_action_id AS "actionId",
+            ra.recommendation_id        AS "recommendationId",
+            ra.category                 AS "category",
+            ra.title                    AS "title",
+            ra.description              AS "description",
+            ra.type                     AS "type",
+            ra.priority                 AS "priority"
+        FROM recommendation_action ra
+        JOIN company_recommendation cr ON ra.recommendation_id = cr.recommendation_id
+        WHERE cr.resume_id = :resumeId AND cr.job_posting_id = :jobPostingId
+        ORDER BY ra.type, ra.priority ASC NULLS LAST
+    `;
+    const actionResult = await conn.execute(
+        actionSql,
+        { resumeId: Number(resumeId), jobPostingId: Number(jobPostingId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const actions = actionResult.rows;
+
+    return {
+        diagnosis,
+        resumeActions: actions.filter(a => String(a.type).toUpperCase() === 'RESUME'),
+        finalActions:  actions.filter(a => String(a.type).toUpperCase() === 'FINAL'),
+    };
+}
+
 module.exports = {
     deleteRecommendationResultsByResumeStage,
     createCompanyRecommendation,
     createRecommendationMetricDetail,
+    findRecommendationsByResume,
+    findRecommendationByResumeAndJob,
+    createPortfolioDiagnosis,
+    createActionPlan,
+    createRecommendationAction,
+    deletePortfolioDiagnosisByResumeJob,
+    deleteRecommendationActionsByRecommendationId,
+    findActionPlanByResumeJob,
 };

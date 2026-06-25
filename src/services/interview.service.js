@@ -1018,7 +1018,47 @@ function createError(status, message) {
     return error;
 }
 
+
+async function getSessionsByMemberId(memberId) {
+    const conn = await db.getConnection();
+    try {
+        const sessions = await interviewRepository.findSessionsByMemberId(conn, memberId);
+        return { success: true, message: "면접 세션 목록 조회 성공", data: sessions };
+    } finally {
+        await conn.close();
+    }
+}
+
+
+async function getInterviewHistory(interviewSessionId) {
+    const conn = await db.getConnection();
+    try {
+        const data = await interviewRepository.findHistoryBySessionId(conn, interviewSessionId);
+        if (!data) {
+            const err = new Error("세션을 찾을 수 없습니다.");
+            err.statusCode = 404;
+            throw err;
+        }
+        return { success: true, message: "면접 이력 조회 성공", data };
+    } finally {
+        await conn.close();
+    }
+}
+
+async function getInterviewReport(interviewSessionId) {
+    const conn = await db.getConnection();
+    try {
+        const items = await interviewRepository.findReportBySessionId(conn, interviewSessionId);
+        return { success: true, message: "면접 리포트 조회 성공", data: items };
+    } finally {
+        await conn.close();
+    }
+}
+
 module.exports = {
+    getInterviewHistory,
+    getInterviewReport,
+    getSessionsByMemberId,
     startInterview,
     submitAnswer,
     finishInterview,

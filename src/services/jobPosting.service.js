@@ -17,10 +17,8 @@ async function getJobPostings(query) {
             jobName: query.jobName || null,
         };
 
-        const [items, totalCount] = await Promise.all([
-            jobPostingRepository.findAll(conn, filters),
-            jobPostingRepository.countAll(conn, filters),
-        ]);
+        const items = await jobPostingRepository.findAll(conn, filters);
+        const totalCount = await jobPostingRepository.countAll(conn, filters);
 
         return {
             page,

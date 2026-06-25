@@ -337,7 +337,137 @@ async function completeSession(conn, interviewSessionId) {
     await conn.execute(sql, { interviewSessionId }, { autoCommit: false });
 }
 
+
+async function findSessionsByMemberId(conn, memberId) {
+    const oracledb = require("oracledb");
+    const sql = `
+        SELECT
+            s.interview_session_id  AS "interviewSessionId",
+            s.resume_id             AS "resumeId",
+            s.job_posting_id        AS "jobPostingId",
+            s.interview_title       AS "interviewTitle",
+            s.interview_type        AS "interviewType",
+            s.interview_format      AS "interviewFormat",
+            s.interview_level       AS "interviewLevel",
+            s.apply_industry        AS "applyIndustry",
+            s.apply_job             AS "applyJob",
+            s.start_time            AS "startTime",
+            s.end_time              AS "endTime",
+            s.session_status        AS "sessionStatus",
+            s.total_question_count  AS "totalQuestionCount",
+            s.total_answer_count    AS "totalAnswerCount",
+            jp.job_name             AS "jobName",
+            c.company_name          AS "companyName",
+            r.total_score           AS "totalScore",
+            r.logic_score           AS "logicScore",
+            r.tech_understanding_score AS "techUnderstandingScore",
+            r.business_link_score   AS "businessLinkScore",
+            r.evidence_score        AS "evidenceScore",
+            r.job_fit_score         AS "jobFitScore"
+        FROM interview_session s
+        JOIN resume res ON s.resume_id = res.resume_id
+        JOIN job_posting jp ON s.job_posting_id = jp.job_posting_id
+        JOIN company c ON jp.company_id = c.company_id
+        LEFT JOIN interview_report r ON s.interview_session_id = r.interview_session_id
+            AND r.feedback_type = 'SUMMARY'
+        WHERE res.member_id = :memberId
+        ORDER BY s.start_time DESC
+    `;
+    const result = await conn.execute(
+        sql,
+        { memberId: Number(memberId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows;
+}
+
+
+async function findHistoryBySessionId(conn, interviewSessionId) {
+    const oracledb = require("oracledb");
+    const sessionSql = `
+        SELECT
+            s.interview_session_id  AS "interviewSessionId",
+            s.resume_id             AS "resumeId",
+            s.job_posting_id        AS "jobPostingId",
+            s.interview_title       AS "interviewTitle",
+            s.interview_type        AS "interviewType",
+            s.interview_format      AS "interviewFormat",
+            s.interview_level       AS "interviewLevel",
+            s.apply_industry        AS "applyIndustry",
+            s.apply_job             AS "applyJob",
+            s.start_time            AS "startTime",
+            s.end_time              AS "endTime",
+            s.session_status        AS "sessionStatus",
+            s.total_question_count  AS "totalQuestionCount",
+            s.total_answer_count    AS "totalAnswerCount",
+            jp.job_name             AS "jobName",
+            c.company_name          AS "companyName"
+        FROM interview_session s
+        JOIN job_posting jp ON s.job_posting_id = jp.job_posting_id
+        JOIN company c ON jp.company_id = c.company_id
+        WHERE s.interview_session_id = :interviewSessionId
+    `;
+    const qaSql = `
+        SELECT
+            interview_qa_id         AS "interviewQaId",
+            interview_session_id    AS "interviewSessionId",
+            parent_qa_id            AS "parentQaId",
+            question_order          AS "questionOrder",
+            question_type           AS "questionType",
+            interviewer_role        AS "interviewerRole",
+            question_content        AS "questionContent",
+            answer_content          AS "answerContent",
+            follow_up_yn            AS "followUpYn",
+            question_created_at     AS "questionCreatedAt",
+            answered_at             AS "answeredAt"
+        FROM interview_qa
+        WHERE interview_session_id = :interviewSessionId
+        ORDER BY question_order ASC
+    `;
+    const bind = { interviewSessionId: Number(interviewSessionId) };
+    const opts = { outFormat: oracledb.OUT_FORMAT_OBJECT };
+
+    const sessionResult = await conn.execute(sessionSql, bind, opts);
+    const qaResult = await conn.execute(qaSql, bind, opts);
+
+    const session = sessionResult.rows[0] ?? null;
+    if (!session) return null;
+    session.qaList = qaResult.rows;
+    return session;
+}
+
+async function findReportBySessionId(conn, interviewSessionId) {
+    const oracledb = require("oracledb");
+    const sql = `
+        SELECT
+            interview_report_id         AS "interviewReportId",
+            interview_session_id        AS "interviewSessionId",
+            logic_score                 AS "logicScore",
+            tech_understanding_score    AS "techUnderstandingScore",
+            business_link_score         AS "businessLinkScore",
+            evidence_score              AS "evidenceScore",
+            job_fit_score               AS "jobFitScore",
+            total_score                 AS "totalScore",
+            feedback_content            AS "feedbackContent",
+            feedback_type               AS "feedbackType",
+            display_order               AS "displayOrder",
+            created_date                AS "createdDate"
+        FROM interview_report
+        WHERE interview_session_id = :interviewSessionId
+        ORDER BY display_order ASC NULLS LAST
+    `;
+    const result = await conn.execute(
+        sql,
+        { interviewSessionId: Number(interviewSessionId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows;
+}
+
 module.exports = {
+    findHistoryBySessionId,
+    findReportBySessionId,
+    findSessionsByMemberId,
     createSession,
     findSessionById,
     findNextAttemptNo,
