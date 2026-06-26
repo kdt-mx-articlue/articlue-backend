@@ -10,18 +10,20 @@ const { initOraclePool, closeOraclePool } = require("./config/db");
 const corsMiddleware = require("./config/cors");
 
 // DBR 기사 크롤링
-const { initializeContext } = require("./services/article.service");
+// const { initializeContext } = require("./services/article.service");
 const { startScheduler, stopScheduler } = require("./scheduler/article.scheduler");
 const articleRoutes = require("./routes/article.route");
 
 // 라우팅포인트 load
-const testRoutes = require("./routes/test.route.js");
+// const testRoutes = require("./routes/test.route.js");
 const authRoutes = require("./routes/auth.route.js");
 const memberRoutes = require("./routes/member.route.js");
 const resumeRoutes = require("./routes/resume.route.js")
 const githubRoutes = require("./routes/github.route.js");
 const interviewRoutes = require("./routes/interview.route.js");
 const jobPostingRotes = require("./routes/jobPosting.route.js");
+const { runPipeline } = require("./pipeline/article.pipeline");
+const pipelineRouter = require("./routes/pipeline.route");
 const coverLetterRoutes = require("./routes/coverLetter.route.js");
 
 const app = express();
@@ -75,7 +77,9 @@ async function startServer() {
         await initOraclePool();
 
         // 2. today_articles.json 초기화
-        await initializeContext();
+        // await initializeContext();
+
+        await runPipeline(5);
 
         // 3. Scheduler 시작
         startScheduler();

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 // 의존성 모듈 로드
-const { crawlList, crawlArticle, closeBrowser } = require('../crawler/dbr.crawler');
+const { crawlList, crawlArticle } = require('../crawler/dbr.crawler');
 const { cleanBody } = require('../services/articleFilter.service');
 const storageUtil = require('../utils/articleStorage.util');
 
@@ -188,7 +188,7 @@ async function runStep8() {
     if (promptContext) await storageUtil.saveCurrent('today_prompt_context.json', promptContext);
 
     // Archive 저장 (고유 ID 기반 중복 제거)
-    const archiveFileName = getArchiveFileName(articles[0].publishedAt);
+    const archiveFileName = getArchiveFileName(articles[0]?.publishedAt);
     const existingArchive = await storageUtil.loadArchive(archiveFileName) || [];
     
     const merged = [...existingArchive, ...articles];
@@ -216,8 +216,6 @@ async function runPipeline(limit = 5) {
     } catch (error) {
         console.error(`\n[Pipeline Error] 파이프라인 예외 발생: ${error.message}`);
         throw error;
-    } finally {
-        await closeBrowser();
     }
 }
 
@@ -239,8 +237,6 @@ async function resumePipeline(startStep = 4, limit = 5) {
     } catch (error) {
         console.error(`\n[Pipeline Error] 복구 가동 중 예외 발생: ${error.message}`);
         throw error;
-    } finally {
-        await closeBrowser();
     }
 }
 

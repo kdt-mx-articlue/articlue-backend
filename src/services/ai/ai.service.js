@@ -1,4 +1,4 @@
-const aiClient = require("../config/ai.config");
+const aiClient = require("../../config/ai.config");
 
 async function analyzeResume(resume) {
 
