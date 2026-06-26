@@ -26,6 +26,25 @@ async function runInterviewGraph(payload) {
     }
 }
 
+async function callFinalMatch(payload) {
+    try {
+        const response = await aiClient.post(
+            "/interview/final-match",
+            payload,
+            {
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+
+        return response.data;
+
+    } catch (error) {
+        throw buildAiError(error, "FastAPI FINAL 분석 호출 실패");
+    }
+}
+
 function buildAiError(error, defaultMessage) {
     if (error.response) {
         const customError = new Error(
@@ -48,4 +67,5 @@ function buildAiError(error, defaultMessage) {
 
 module.exports = {
     runInterviewGraph,
+    callFinalMatch,
 };

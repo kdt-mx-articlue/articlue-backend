@@ -26,6 +26,7 @@ async function generateAndSave({ memberId, resumeId, jobPostingId, companyName, 
     }
 
     // 3. DB 저장
+    let conn;
     conn = await getConnection();
     try {
         const coverLetterId = await coverLetterRepo.createCoverLetter(
