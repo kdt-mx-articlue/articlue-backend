@@ -5,11 +5,10 @@ const { crawlList, crawlArticle, closeBrowser } = require('../crawler/dbr.crawle
 const { cleanBody } = require('../services/articleFilter.service');
 const storageUtil = require('../utils/articleStorage.util');
 
-// 후속 단계 서비스 (향후 구현 시 주석 해제)
-// const articleSummaryService = require('../services/articleSummary.service');
-// const articleKeywordService = require('../services/articleKeyword.service');
-// const articleTrendService = require('../services/articleTrend.service');
-// const promptContextService = require('../services/promptContext.service');
+const articleSummaryService = require('../services/articleSummary.service');
+const articleKeywordService = require('../services/articleKeyword.service');
+const articleTrendService = require('../services/articleTrend.service');
+const promptContextService = require('../services/promptContext.service');
 
 function getArchiveFileName(publishedAtStr) {
     if (!publishedAtStr || !publishedAtStr.includes('.')) {
@@ -115,8 +114,7 @@ async function runStep4() {
         return [];
     }
 
-    // const stage4Data = await articleSummaryService.generate(stage3Data);
-    const stage4Data = stage3Data.map(a => ({ ...a, summary: "[Mock] LLM 기사 요약" }));
+    const stage4Data = await articleSummaryService.generate(stage3Data);
     
     await storageUtil.saveStaging('stage4_summary.json', stage4Data);
     return stage4Data;
@@ -130,8 +128,7 @@ async function runStep5() {
     const articles = await storageUtil.loadStaging('stage4_summary.json');
     if (!articles || articles.length === 0) throw new Error("Stage 4 데이터가 없습니다.");
 
-    // const keywords = await articleKeywordService.extract(articles);
-    const stage5Data = { "AI": 5, "DT": 3 }; 
+    const stage5Data = await articleKeywordService.extract(articles);
     
     // 오직 자신의 결과물만 저장
     await storageUtil.saveStaging('stage5_keywords.json', stage5Data);
@@ -147,8 +144,7 @@ async function runStep6() {
     const keywords = await storageUtil.loadStaging('stage5_keywords.json');
     if (!articles || !keywords) throw new Error("이전 단계 데이터가 없습니다.");
 
-    // const trends = await articleTrendService.generate(articles, keywords);
-    const stage6Data = [ { trendId: 1, topic: "[Mock] 비즈니스 트렌드" } ];
+    const stage6Data = await articleTrendService.generate(articles, keywords);
     
     await storageUtil.saveStaging('stage6_trends.json', stage6Data);
     return stage6Data;
@@ -163,8 +159,7 @@ async function runStep7() {
     const trends = await storageUtil.loadStaging('stage6_trends.json');
     if (!articles || !trends) throw new Error("이전 단계 데이터가 없습니다.");
 
-    // const promptContext = await promptContextService.create(articles, trends);
-    const stage7Data = { contextId: "ctx", rawText: "[Mock] 프롬프트 컨텍스트" };
+    const stage7Data = await promptContextService.create(articles, trends);
     
     await storageUtil.saveStaging('stage7_prompt.json', stage7Data);
     return stage7Data;
