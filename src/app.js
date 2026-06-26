@@ -24,6 +24,7 @@ const interviewRoutes = require("./routes/interview.route.js");
 const jobPostingRotes = require("./routes/jobPosting.route.js");
 const { runPipeline } = require("./pipeline/article.pipeline");
 const pipelineRouter = require("./routes/pipeline.route");
+const coverLetterRoutes = require("./routes/coverLetter.route.js");
 
 const app = express();
 
@@ -42,9 +43,32 @@ app.use("/api/articles", articleRoutes);
 // RESTful API Router
 app.use("/api/auth", authRoutes);
 app.use("/api/resumes", resumeRoutes);
-// app.use("/api/member", memberRoutes);
-// app.use("/api/github", githubRoutes);
+app.use("/api/member", memberRoutes);
+app.use("/api/members", memberRoutes);
+app.use("/api/github", githubRoutes);
+app.use("/api/interviews", interviewRoutes);
+app.use("/api/job-postings", jobPostingRotes);
+app.use("/api/cover-letters", coverLetterRoutes);
 app.use("/api/test", testRoutes);
+
+// ⚠️ 임시 디버그
+app.get("/api/debug/jp-count", async (req, res) => {
+    const { getConnection } = require("./config/db");
+    const oracledb = require("oracledb");
+    let conn;
+    try {
+        conn = await getConnection();
+        const r1 = await conn.execute("SELECT COUNT(*) AS CNT FROM JOB_POSTING", {}, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+        const r2 = await conn.execute("SELECT COUNT(*) AS CNT FROM COMPANY", {}, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+        const r3 = await conn.execute(
+            "SELECT jp.job_posting_id, c.company_name, jp.job_name FROM job_posting jp JOIN company c ON jp.company_id = c.company_id WHERE ROWNUM <= 3",
+            {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        res.json({ jobPostingCount: r1.rows[0].CNT, companyCount: r2.rows[0].CNT, sample: r3.rows });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+    finally { if (conn) await conn.close(); }
+});
+
 
 // 서버 실행
 async function startServer() {

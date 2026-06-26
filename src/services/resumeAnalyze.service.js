@@ -1,7 +1,15 @@
 const { getConnection } = require("../config/db");
-const aiClient = require("../config/ai.config");
+const aiConfig = require("../config/ai.config");
 const analysisRepository = require("../repositories/resumeAnalysis.repository");
 const { createError } = require("../utils/error.util");
+
+/*
+ * ai.config.js export 방식이
+ * 1) module.exports = aiClient
+ * 2) module.exports = { aiClient }
+ * 둘 중 무엇이든 동작하게 처리합니다.
+ */
+const aiClient = aiConfig.aiClient || aiConfig;
 
 const RADAR_METRIC_TYPES = [
     "business_fit",
@@ -29,6 +37,40 @@ function pick(target, fieldNames, defaultValue = null) {
     }
 
     return defaultValue;
+}
+
+/*
+ * FastAPI / Python 쪽에서 None이 join에 들어가면 아래 오류가 발생합니다.
+ *
+ * TypeError: sequence item 0: expected str instance, NoneType found
+ *
+ * Node JSON의 null은 Python에서 None이 되므로,
+ * AI 서버로 보내기 전에 null / undefined를 빈 문자열로 정리합니다.
+ */
+function replaceNullWithEmptyString(value) {
+    if (value === null || value === undefined) {
+        return "";
+    }
+
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => replaceNullWithEmptyString(item));
+    }
+
+    if (typeof value === "object") {
+        const result = {};
+
+        for (const [key, childValue] of Object.entries(value)) {
+            result[key] = replaceNullWithEmptyString(childValue);
+        }
+
+        return result;
+    }
+
+    return value;
 }
 
 function requireText(value, message) {
@@ -230,7 +272,51 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
     for (let index = 0; index < jobMatches.length; index++) {
         const item = jobMatches[index];
 
-        const rawJobPostingId = pick(item, ["jobPostingId", "job_posting_id"]);
+        /*
+         * AI 응답 구조 대응
+         *
+         * 현재 AI는 아래 구조로 반환함:
+         * {
+         *   job_posting_id: 17,
+         *   analysis: {
+         *     type: "RESUME",
+         *     overall_score: 20.9,
+         *     metrics: { ... }
+         *   }
+         * }
+         *
+         * 기존 백엔드는 item.metrics를 기대했기 때문에
+         * item.analysis.metrics도 같이 처리해야 함.
+         */
+        const nestedAnalysis =
+            item.analysis && typeof item.analysis === "object"
+                ? item.analysis
+                : {};
+
+        const normalizedItem = {
+            ...item,
+            analysisStage:
+                item.analysisStage ||
+                item.analysis_stage ||
+                nestedAnalysis.analysisStage ||
+                nestedAnalysis.analysis_stage ||
+                nestedAnalysis.type ||
+                analysisStage,
+            overallScore:
+                item.overallScore ||
+                item.overall_score ||
+                nestedAnalysis.overallScore ||
+                nestedAnalysis.overall_score,
+            metrics:
+                item.metrics ||
+                nestedAnalysis.metrics,
+        };
+
+        const rawJobPostingId = pick(
+            normalizedItem,
+            ["jobPostingId", "job_posting_id"]
+        );
+
         const jobPostingIdNumber = Number(rawJobPostingId);
 
         if (
@@ -259,19 +345,22 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
         jobPostingIdSet.add(jobPostingIdNumber);
 
         const itemAnalysisStage = pick(
-            item,
+            normalizedItem,
             ["analysisStage", "analysis_stage"],
             analysisStage
         );
 
-        if (String(itemAnalysisStage).toUpperCase() !== String(analysisStage).toUpperCase()) {
+        if (
+            String(itemAnalysisStage).toUpperCase() !==
+            String(analysisStage).toUpperCase()
+        ) {
             throw createError("추천 결과의 분석 단계가 요청 분석 단계와 다릅니다.", 502);
         }
 
-        const metrics = normalizeRadarMetrics(item);
+        const metrics = normalizeRadarMetrics(normalizedItem);
 
         const overallScoreValue = pick(
-            item,
+            normalizedItem,
             ["overallScore", "overall_score"]
         );
 
@@ -279,16 +368,20 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
             ? calculateOverallScore(metrics)
             : normalizeScore(overallScoreValue, "overall_score");
 
+        // AI 응답의 analysis 객체에서 diagnosis / action_plans 추출
+        const nestedAnalysisForDiag =
+            item.analysis && typeof item.analysis === "object" ? item.analysis : {};
+
         analysisItems.push({
-            companyId: pick(item, ["companyId", "company_id"]),
+            companyId: pick(normalizedItem, ["companyId", "company_id"]),
             jobPostingId: jobPostingIdNumber,
             analysisStage,
-            recommendRank: parseOptionalPositiveInt(
-                pick(item, ["recommendRank", "recommend_rank", "rank"]),
-                analysisItems.length + 1
-            ),
+            // recommendRank은 아래에서 overallScore 기준으로 재할당하므로 임시값
+            recommendRank: analysisItems.length + 1,
             overallScore,
             metrics,
+            diagnosis:   nestedAnalysisForDiag.diagnosis   ?? null,
+            actionPlans: nestedAnalysisForDiag.action_plans ?? [],
         });
     }
 
@@ -300,6 +393,13 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
         throw createError("AI 추천 결과 개수가 요청한 recommendation_limit보다 많습니다.", 502);
     }
 
+    // AI가 rank=1로 일괄 반환하는 버그를 보정:
+    // overallScore 내림차순으로 정렬 후 순서 기반으로 rank 재할당
+    analysisItems.sort((a, b) => (b.overallScore ?? 0) - (a.overallScore ?? 0));
+    analysisItems.forEach((item, idx) => {
+        item.recommendRank = idx + 1;
+    });
+
     return {
         analysisItems,
         skippedItems,
@@ -307,15 +407,29 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
 }
 
 async function requestResumeAnalysisToAi(payload) {
+    /*
+     * 현재 FastAPI 라우터:
+     * @router.post("/pipeline/analyze")
+     *
+     * main.py에서 prefix="/api" 없이 등록했다면:
+     * /pipeline/analyze
+     */
     const path =
         process.env.AI_RESUME_ANALYSIS_PATH ||
-        "/api/ai/resumes/analyze";
+        "/pipeline/analyze";
 
     const timeout =
         Number(process.env.AI_RESUME_ANALYSIS_TIMEOUT_MS) ||
         120000;
 
     try {
+        console.log("[AI REQUEST TARGET]", {
+            baseURL: aiClient.defaults?.baseURL,
+            path,
+            timeout,
+            aiClientPostType: typeof aiClient.post,
+        });
+
         const response = await aiClient.post(
             path,
             payload,
@@ -352,12 +466,30 @@ async function analyzeAndSave({
     const normalizedRecommendationLimit =
         normalizeRecommendationLimit(recommendationLimit);
 
+    /*
+     * FastAPI PipelineRequest 구조:
+     *
+     * class PipelineRequest(BaseModel):
+     *     success: bool
+     *     message: str
+     *     data: Dict[str, Any]
+     *
+     * 그래서 resume_id / resume 형태가 아니라
+     * success / message / data 형태로 보내야 합니다.
+     */
+    const sanitizedResumeDetail = replaceNullWithEmptyString(resumeDetail);
+
     const aiPayload = {
-        resume_id: resumeId,
+        success: true,
+        message: "이력서 상세 조회 성공",
+        data: sanitizedResumeDetail,
         analysis_stage: normalizedAnalysisStage,
-        recommendation_limit: normalizedRecommendationLimit,
-        resume: resumeDetail,
     };
+
+    console.log(
+        "[AI PAYLOAD CHECK] projectDescriptions:",
+        sanitizedResumeDetail.githubRepositories?.map((repo) => repo.projectDescription)
+    );
 
     console.log("[AI REQUEST]", JSON.stringify(aiPayload, null, 2));
 
@@ -375,6 +507,9 @@ async function analyzeAndSave({
             recommendationLimit: normalizedRecommendationLimit,
             aiResult,
         });
+
+        console.log("[AI SAVE RESULT]", JSON.stringify(savedResult, null, 2));
+        console.log("[AI SAVE COUNT]", JSON.stringify(savedResult.savedCount, null, 2));
 
         await conn.commit();
 
@@ -428,18 +563,28 @@ async function saveAiAnalysisResult({
     let savedMetricCount = 0;
 
     for (const analysisItem of analysisItems) {
-        const recommendationId =
-            await analysisRepository.createCompanyRecommendation(
-                {
-                    resumeId,
-                    jobPostingId: analysisItem.jobPostingId,
-                    analysisStage: analysisItem.analysisStage,
-                    overallScore: analysisItem.overallScore,
-                    latestInterviewId: null,
-                    recommendRank: analysisItem.recommendRank,
-                },
-                conn
-            );
+        let recommendationId;
+        try {
+            recommendationId =
+                await analysisRepository.createCompanyRecommendation(
+                    {
+                        resumeId,
+                        jobPostingId: analysisItem.jobPostingId,
+                        analysisStage: analysisItem.analysisStage,
+                        overallScore: analysisItem.overallScore,
+                        latestInterviewId: null,
+                        recommendRank: analysisItem.recommendRank,
+                    },
+                    conn
+                );
+        } catch (err) {
+            // Oracle FK 위반: JOB_POSTING 테이블에 해당 공고가 없으면 skip
+            if (err.errorNum === 2291 || (err.message && err.message.includes("ORA-02291"))) {
+                console.warn(`[ANALYSIS] job_posting_id=${analysisItem.jobPostingId} 가 JOB_POSTING 테이블에 없어 추천 저장 스킵`);
+                continue;
+            }
+            throw err;
+        }
 
         for (const metric of analysisItem.metrics) {
             await analysisRepository.createRecommendationMetricDetail(
@@ -453,6 +598,50 @@ async function saveAiAnalysisResult({
             );
 
             savedMetricCount++;
+        }
+
+        // portfolio_diagnosis 저장 (weakness 진단)
+        const diag = analysisItem.diagnosis;
+        if (diag && typeof diag === "object") {
+            try {
+                await analysisRepository.deletePortfolioDiagnosisByResumeJob(
+                    resumeId, analysisItem.jobPostingId, conn
+                );
+                await analysisRepository.createPortfolioDiagnosis({
+                    resumeId,
+                    jobPostingId:                analysisItem.jobPostingId,
+                    diagnosisSummary:            diag.diagnosis_summary             ?? null,
+                    techStackWeakness:           diag.tech_stack_weakness           ?? null,
+                    projectExperienceWeakness:   diag.project_experience_weakness   ?? null,
+                    businessResultWeakness:      diag.business_result_weakness      ?? null,
+                    domainUnderstandingWeakness: diag.domain_understanding_weakness ?? null,
+                    improvementPriority:         diag.improvement_priority          ?? null,
+                }, conn);
+            } catch (diagErr) {
+                if (diagErr.errorNum === 2291 || (diagErr.message && diagErr.message.includes("ORA-02291"))) {
+                    console.warn(`[ANALYSIS] portfolio_diagnosis job_posting_id=${analysisItem.jobPostingId} FK 위반 스킵`);
+                } else {
+                    throw diagErr;
+                }
+            }
+        }
+
+        // recommendation_action 저장 (1차/2차 구분 액션 추천)
+        const plans = Array.isArray(analysisItem.actionPlans) ? analysisItem.actionPlans : [];
+        if (plans.length > 0) {
+            await analysisRepository.deleteRecommendationActionsByRecommendationId(
+                recommendationId, conn
+            );
+            for (const plan of plans) {
+                await analysisRepository.createRecommendationAction({
+                    recommendationId,
+                    category:    plan.category           ?? 'ACTION',
+                    title:       plan.action_plan_title  ?? "액션 플랜",
+                    description: plan.action_plan_summary ?? "",
+                    type:        analysisItem.analysisStage, // 'RESUME' or 'FINAL'
+                    priority:    plan.priority            ?? null,
+                }, conn);
+            }
         }
 
         savedRecommendations.push({

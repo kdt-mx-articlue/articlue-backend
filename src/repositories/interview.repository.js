@@ -1,5 +1,52 @@
 const oracledb = require("oracledb");
 
+// =============================================================
+// CLOB 헬퍼
+//
+// DBMS_LOB.SUBSTR 로 SQL 안에서 잘라오면 한글 기준으로
+// VARCHAR2 버퍼 한계(4000 byte)를 초과해 ORA-06502 가 발생한다.
+// SQL 에서는 CLOB 컬럼을 그대로 SELECT 하고,
+// node-oracledb 가 LOB 객체로 반환한 뒤 Node.js 스트림으로
+// 전체를 읽어서 문자열로 변환한다.
+// connection 이 살아 있는 동안(repository 함수 return 전)
+// 반드시 스트림을 끝까지 읽어야 한다.
+// =============================================================
+
+/**
+ * LOB 객체를 utf-8 문자열로 변환한다.
+ * - null / undefined  → null 반환
+ * - 이미 string 이면 그대로 반환 (작은 CLOB 은 자동으로 string 이 되기도 함)
+ * - LOB 객체이면 data/end/error 이벤트로 스트림 전체를 읽는다
+ */
+function readLobToString(lob) {
+    return new Promise((resolve, reject) => {
+        if (!lob) return resolve(null);
+        if (typeof lob === "string") return resolve(lob);
+
+        let data = "";
+        lob.setEncoding("utf8");
+        lob.on("data",  (chunk) => { data += chunk; });
+        lob.on("end",   ()      => { resolve(data); });
+        lob.on("error", (err)   => { reject(err); });
+    });
+}
+
+/**
+ * 하나의 row 에서 지정한 필드들의 LOB → string 변환을 일괄 처리한다.
+ * @param {object}   row    - oracledb OUT_FORMAT_OBJECT 한 행
+ * @param {string[]} fields - LOB 일 수 있는 필드명 목록
+ */
+async function resolveClobRow(row, fields) {
+    if (!row) return row;
+    const resolved = { ...row };
+    for (const field of fields) {
+        if (resolved[field] !== undefined) {
+            resolved[field] = await readLobToString(resolved[field]);
+        }
+    }
+    return resolved;
+}
+
 async function createSession(conn, data) {
     const sql = `
         INSERT INTO interview_session (
@@ -223,17 +270,18 @@ async function incrementAnswerCount(conn, interviewSessionId) {
 }
 
 async function findQaById(conn, interviewSessionId, interviewQaId) {
+    // DBMS_LOB.SUBSTR 제거 → CLOB 원문 전체를 LOB 객체로 받아 Node.js 에서 변환
     const sql = `
         SELECT
-            interview_qa_id AS "interviewQaId",
+            interview_qa_id      AS "interviewQaId",
             interview_session_id AS "interviewSessionId",
-            parent_qa_id AS "parentQaId",
-            question_order AS "questionOrder",
-            question_type AS "questionType",
-            interviewer_role AS "interviewerRole",
-            DBMS_LOB.SUBSTR(question_content, 4000, 1) AS "questionContent",
-            DBMS_LOB.SUBSTR(answer_content, 4000, 1) AS "answerContent",
-            follow_up_yn AS "followUpYn"
+            parent_qa_id         AS "parentQaId",
+            question_order       AS "questionOrder",
+            question_type        AS "questionType",
+            interviewer_role     AS "interviewerRole",
+            question_content     AS "questionContent",
+            answer_content       AS "answerContent",
+            follow_up_yn         AS "followUpYn"
         FROM interview_qa
         WHERE interview_session_id = :interviewSessionId
           AND interview_qa_id = :interviewQaId
@@ -245,23 +293,27 @@ async function findQaById(conn, interviewSessionId, interviewQaId) {
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows[0] || null;
+    // connection 이 살아 있는 동안 LOB 스트림 전체를 읽는다
+    return resolveClobRow(result.rows[0] || null, ["questionContent", "answerContent"]);
 }
 
 async function findQasBySessionId(conn, interviewSessionId) {
+    // DBMS_LOB.SUBSTR 제거 → CLOB 원문 전체를 LOB 객체로 받아 Node.js 에서 변환.
+    // 답변 제출 후 다음 질문 생성에 필요한 전체 Q/A 히스토리를 FastAPI 에 넘기므로
+    // 문맥이 잘리면 안 된다. connection 이 살아 있는 동안 스트림을 모두 읽는다.
     const sql = `
         SELECT
-            interview_qa_id AS "interviewQaId",
+            interview_qa_id      AS "interviewQaId",
             interview_session_id AS "interviewSessionId",
-            parent_qa_id AS "parentQaId",
-            question_order AS "questionOrder",
-            question_type AS "questionType",
-            interviewer_role AS "interviewerRole",
-            DBMS_LOB.SUBSTR(question_content, 4000, 1) AS "questionContent",
-            DBMS_LOB.SUBSTR(answer_content, 4000, 1) AS "answerContent",
-            follow_up_yn AS "followUpYn",
-            question_created_at AS "questionCreatedAt",
-            answered_at AS "answeredAt"
+            parent_qa_id         AS "parentQaId",
+            question_order       AS "questionOrder",
+            question_type        AS "questionType",
+            interviewer_role     AS "interviewerRole",
+            question_content     AS "questionContent",
+            answer_content       AS "answerContent",
+            follow_up_yn         AS "followUpYn",
+            question_created_at  AS "questionCreatedAt",
+            answered_at          AS "answeredAt"
         FROM interview_qa
         WHERE interview_session_id = :interviewSessionId
         ORDER BY question_order
@@ -273,7 +325,12 @@ async function findQasBySessionId(conn, interviewSessionId) {
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows;
+    // 수십 건 이하이므로 Promise.all 로 병렬 변환해도 무방하다
+    return Promise.all(
+        result.rows.map((row) =>
+            resolveClobRow(row, ["questionContent", "answerContent"])
+        )
+    );
 }
 
 async function insertReportItem(conn, data) {
@@ -337,7 +394,149 @@ async function completeSession(conn, interviewSessionId) {
     await conn.execute(sql, { interviewSessionId }, { autoCommit: false });
 }
 
+
+async function findSessionsByMemberId(conn, memberId) {
+    const oracledb = require("oracledb");
+    const sql = `
+        SELECT
+            s.interview_session_id  AS "interviewSessionId",
+            s.resume_id             AS "resumeId",
+            s.job_posting_id        AS "jobPostingId",
+            s.interview_title       AS "interviewTitle",
+            s.interview_type        AS "interviewType",
+            s.interview_format      AS "interviewFormat",
+            s.interview_level       AS "interviewLevel",
+            s.apply_industry        AS "applyIndustry",
+            s.apply_job             AS "applyJob",
+            s.start_time            AS "startTime",
+            s.end_time              AS "endTime",
+            s.session_status        AS "sessionStatus",
+            s.total_question_count  AS "totalQuestionCount",
+            s.total_answer_count    AS "totalAnswerCount",
+            jp.job_name             AS "jobName",
+            c.company_name          AS "companyName",
+            r.total_score           AS "totalScore",
+            r.logic_score           AS "logicScore",
+            r.tech_understanding_score AS "techUnderstandingScore",
+            r.business_link_score   AS "businessLinkScore",
+            r.evidence_score        AS "evidenceScore",
+            r.job_fit_score         AS "jobFitScore"
+        FROM interview_session s
+        JOIN resume res ON s.resume_id = res.resume_id
+        JOIN job_posting jp ON s.job_posting_id = jp.job_posting_id
+        JOIN company c ON jp.company_id = c.company_id
+        LEFT JOIN interview_report r ON s.interview_session_id = r.interview_session_id
+            AND r.feedback_type = 'SUMMARY'
+        WHERE res.member_id = :memberId
+        ORDER BY s.start_time DESC
+    `;
+    const result = await conn.execute(
+        sql,
+        { memberId: Number(memberId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows;
+}
+
+
+async function findHistoryBySessionId(conn, interviewSessionId) {
+    const oracledb = require("oracledb");
+    const sessionSql = `
+        SELECT
+            s.interview_session_id  AS "interviewSessionId",
+            s.resume_id             AS "resumeId",
+            s.job_posting_id        AS "jobPostingId",
+            s.interview_title       AS "interviewTitle",
+            s.interview_type        AS "interviewType",
+            s.interview_format      AS "interviewFormat",
+            s.interview_level       AS "interviewLevel",
+            s.apply_industry        AS "applyIndustry",
+            s.apply_job             AS "applyJob",
+            s.start_time            AS "startTime",
+            s.end_time              AS "endTime",
+            s.session_status        AS "sessionStatus",
+            s.total_question_count  AS "totalQuestionCount",
+            s.total_answer_count    AS "totalAnswerCount",
+            jp.job_name             AS "jobName",
+            c.company_name          AS "companyName"
+        FROM interview_session s
+        JOIN job_posting jp ON s.job_posting_id = jp.job_posting_id
+        JOIN company c ON jp.company_id = c.company_id
+        WHERE s.interview_session_id = :interviewSessionId
+    `;
+    const qaSql = `
+        SELECT
+            interview_qa_id         AS "interviewQaId",
+            interview_session_id    AS "interviewSessionId",
+            parent_qa_id            AS "parentQaId",
+            question_order          AS "questionOrder",
+            question_type           AS "questionType",
+            interviewer_role        AS "interviewerRole",
+            question_content        AS "questionContent",
+            answer_content          AS "answerContent",
+            follow_up_yn            AS "followUpYn",
+            question_created_at     AS "questionCreatedAt",
+            answered_at             AS "answeredAt"
+        FROM interview_qa
+        WHERE interview_session_id = :interviewSessionId
+        ORDER BY question_order ASC
+    `;
+    const bind = { interviewSessionId: Number(interviewSessionId) };
+    const opts = { outFormat: oracledb.OUT_FORMAT_OBJECT };
+
+    const sessionResult = await conn.execute(sessionSql, bind, opts);
+    const qaResult      = await conn.execute(qaSql,       bind, opts);
+
+    const session = sessionResult.rows[0] ?? null;
+    if (!session) return null;
+
+    // qa 의 question_content, answer_content 는 CLOB 이므로 스트림 전체 변환
+    session.qaList = await Promise.all(
+        qaResult.rows.map((row) =>
+            resolveClobRow(row, ["questionContent", "answerContent"])
+        )
+    );
+    return session;
+}
+
+async function findReportBySessionId(conn, interviewSessionId) {
+    const oracledb = require("oracledb");
+    const sql = `
+        SELECT
+            interview_report_id         AS "interviewReportId",
+            interview_session_id        AS "interviewSessionId",
+            logic_score                 AS "logicScore",
+            tech_understanding_score    AS "techUnderstandingScore",
+            business_link_score         AS "businessLinkScore",
+            evidence_score              AS "evidenceScore",
+            job_fit_score               AS "jobFitScore",
+            total_score                 AS "totalScore",
+            feedback_content            AS "feedbackContent",
+            feedback_type               AS "feedbackType",
+            display_order               AS "displayOrder",
+            created_date                AS "createdDate"
+        FROM interview_report
+        WHERE interview_session_id = :interviewSessionId
+        ORDER BY display_order ASC NULLS LAST
+    `;
+    const result = await conn.execute(
+        sql,
+        { interviewSessionId: Number(interviewSessionId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    // feedback_content 는 CLOB 이므로 스트림 전체 변환
+    return Promise.all(
+        result.rows.map((row) =>
+            resolveClobRow(row, ["feedbackContent"])
+        )
+    );
+}
+
 module.exports = {
+    findHistoryBySessionId,
+    findReportBySessionId,
+    findSessionsByMemberId,
     createSession,
     findSessionById,
     findNextAttemptNo,
