@@ -116,7 +116,14 @@ async function initializeContext() {
     }
 }
 
+
+async function getTodayContext() {
+    const context = await contextUtil.readContext();
+    return context;
+}
+
 module.exports = {
     initializeContext,
-    refreshTodayContext
+    refreshTodayContext,
+    getTodayContext,
 };

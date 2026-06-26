@@ -58,7 +58,51 @@ function sendError(res, error, fallbackMessage) {
     });
 }
 
+
+async function getSessions(req, res) {
+    try {
+        const memberId = req.query.memberId;
+        if (!memberId) {
+            return res.status(400).json({ success: false, message: "memberId가 필요합니다." });
+        }
+        const result = await interviewService.getSessionsByMemberId(memberId);
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "면접 세션 목록 조회 실패" });
+    }
+}
+
+
+async function getHistory(req, res) {
+    try {
+        const { interviewSessionId } = req.params;
+        const result = await interviewService.getInterviewHistory(interviewSessionId);
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error(error);
+        return res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.statusCode ? error.message : "면접 이력 조회 실패"
+        });
+    }
+}
+
+async function getReport(req, res) {
+    try {
+        const { interviewSessionId } = req.params;
+        const result = await interviewService.getInterviewReport(interviewSessionId);
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "면접 리포트 조회 실패" });
+    }
+}
+
 module.exports = {
+    getHistory,
+    getReport,
+    getSessions,
     startInterview,
     submitAnswer,
     finishInterview,
