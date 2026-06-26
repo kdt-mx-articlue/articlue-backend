@@ -4,6 +4,7 @@ const interviewRepository = require("../repositories/interview.repository");
 const interviewContextRepository = require("../repositories/interviewContext.repository");
 const interviewChatbotAiService = require("./interviewChatbotAi.service");
 const elevenlabsService = require("./voice/elevenlabs.service");
+const resumeAnalysisRepository = require("../repositories/resumeAnalysis.repository");
 
 const {
     DEFAULT_RUNTIME_CONFIG,
@@ -38,6 +39,7 @@ async function startInterview(body) {
         config: runtimeConfig,
         resumeText: startData.resumeText,
         jobPostingText: startData.jobPostingText,
+        weakPointsText: startData.weakPointsText || "",
         previousQas: [],
         previousScores: [],
         currentTurn: null,
@@ -137,6 +139,18 @@ async function createInterviewSessionAndContext(config) {
             }
         );
 
+        // 1차 RESUME 분석 약점 로딩 (없으면 빈 문자열 사용)
+        let weakPointsText = "";
+        try {
+            const resumeRec = await resumeAnalysisRepository.findRecommendationByResumeAndJob(
+                conn,
+                config.resumeId,
+                config.jobPostingId,
+                "RESUME"
+            );
+            weakPointsText = buildWeakPoints(resumeRec);
+        } catch (_) {}
+
         await conn.commit();
 
         return {
@@ -144,6 +158,7 @@ async function createInterviewSessionAndContext(config) {
             resumeText,
             jobPostingText: jobPostingContext.contextText,
             jobPosting,
+            weakPointsText,
         };
 
     } catch (error) {
@@ -540,6 +555,16 @@ async function finishInterview(params) {
 
     removeRuntimeConfig(interviewSessionId);
 
+    // 면접 완료 후 2차 FINAL 분석 자동 트리거 (비동기 - 실패해도 면접 결과에 영향 없음)
+    triggerFinalAnalysis({
+        resumeId: finishContext.config.resumeId,
+        jobPostingId: finishContext.config.jobPostingId,
+        companyName: finishContext.config.targetCompany || "",
+        finalReport: graphResult.finalReport,
+    }).catch((err) => {
+        console.error("[FINAL분석] 자동 트리거 실패 (무시됨):", err.message);
+    });
+
     return {
         interviewSessionId,
         sessionStatus: "COMPLETED",
@@ -744,6 +769,7 @@ function buildGraphPayload({
     config,
     resumeText,
     jobPostingText,
+    weakPointsText = "",
     previousQas,
     previousScores,
     currentTurn,
@@ -784,6 +810,7 @@ function buildGraphPayload({
             resumeText,
             jobPostingText,
             portfolioText: "",
+            weakPointsText,
         },
         history: {
             previousQas,
@@ -1018,7 +1045,209 @@ function createError(status, message) {
     return error;
 }
 
+/**
+ * 1차 분석 metrics에서 약점 텍스트 생성 (score < 60인 항목)
+ */
+function buildWeakPoints(resumeRec) {
+    if (!resumeRec || !resumeRec.metrics) return "";
+
+    const METRIC_LABELS = {
+        business_fit: "비즈니스 이해도",
+        tech_stack_fit: "기술스택 적합도",
+        requirement_fit: "경력/요건 충족도",
+        action_result_fit: "성과/행동 역량",
+        culture_fit: "문화적 적합도",
+    };
+
+    const weak = Object.entries(resumeRec.metrics)
+        .filter(([, v]) => (v.score ?? 100) < 60)
+        .sort(([, a], [, b]) => (a.score ?? 100) - (b.score ?? 100));
+
+    if (weak.length === 0) return "";
+
+    const lines = weak.map(([type, v]) =>
+        `- ${METRIC_LABELS[type] || type}: ${v.score}점 (${v.reasonText || ""})`
+    );
+
+    return `[1차 분석 약점 영역]\n${lines.join("\n")}`;
+}
+
+/**
+ * 면접 완료 후 2차 FINAL 분석 자동 저장
+ *
+ * 1차 RESUME metrics + 면접 점수를 합산하여
+ * COMPANY_RECOMMENDATION (FINAL stage)에 저장한다.
+ * 해당 resumeId + jobPostingId 의 FINAL 결과만 교체한다.
+ */
+async function triggerFinalAnalysis({ resumeId, jobPostingId, companyName, finalReport }) {
+    let conn;
+
+    try {
+        conn = await db.getConnection();
+
+        // 1차 RESUME metrics 조회
+        const resumeRec = await resumeAnalysisRepository.findRecommendationByResumeAndJob(
+            conn,
+            resumeId,
+            jobPostingId,
+            "RESUME"
+        );
+
+        if (!resumeRec || !resumeRec.metrics) {
+            console.warn("[FINAL분석] 1차 분석 결과 없음 — FINAL 분석 생략");
+            return;
+        }
+
+        const interviewData = {
+            logic_score: finalReport.logicScore,
+            tech_understanding_score: finalReport.techUnderstandingScore,
+            business_link_score: finalReport.businessLinkScore,
+            evidence_score: finalReport.evidenceScore,
+            job_fit_score: finalReport.jobFitScore,
+        };
+
+        const resumeData = {
+            metrics: {
+                business_fit: {
+                    score: resumeRec.metrics.business_fit?.score ?? 0,
+                    reason_text: resumeRec.metrics.business_fit?.reasonText ?? "",
+                },
+                tech_stack_fit: {
+                    score: resumeRec.metrics.tech_stack_fit?.score ?? 0,
+                    reason_text: resumeRec.metrics.tech_stack_fit?.reasonText ?? "",
+                },
+                requirement_fit: {
+                    score: resumeRec.metrics.requirement_fit?.score ?? 0,
+                    reason_text: resumeRec.metrics.requirement_fit?.reasonText ?? "",
+                },
+                action_result_fit: {
+                    score: resumeRec.metrics.action_result_fit?.score ?? 0,
+                    reason_text: resumeRec.metrics.action_result_fit?.reasonText ?? "",
+                },
+                culture_fit: {
+                    score: resumeRec.metrics.culture_fit?.score ?? 0,
+                    reason_text: resumeRec.metrics.culture_fit?.reasonText ?? "",
+                },
+            },
+        };
+
+        // AI /interview/final-match 호출
+        const finalMatchResult = await interviewChatbotAiService.callFinalMatch({
+            resume_id: resumeId,
+            job_posting_id: jobPostingId,
+            company_name: companyName,
+            resume: resumeData,
+            interview: interviewData,
+        });
+
+        if (!finalMatchResult || !finalMatchResult.analysis) {
+            console.warn("[FINAL분석] AI 응답 없음 — FINAL 분석 생략");
+            return;
+        }
+
+        const { analysis } = finalMatchResult;
+        const metrics = analysis.metrics;
+
+        // 기존 FINAL 결과 삭제 (이 공고만)
+        await resumeAnalysisRepository.deleteRecommendationByResumeJobStage(
+            { resumeId, jobPostingId, analysisStage: "FINAL" },
+            conn
+        );
+
+        // 새 FINAL 결과 저장
+        const recommendationId = await resumeAnalysisRepository.createCompanyRecommendation(
+            {
+                resumeId,
+                jobPostingId,
+                analysisStage: "FINAL",
+                overallScore: analysis.overall_score,
+                latestInterviewId: null,
+                recommendRank: resumeRec.recommendRank || 1,
+            },
+            conn
+        );
+
+        const METRIC_KEYS = [
+            "business_fit",
+            "tech_stack_fit",
+            "requirement_fit",
+            "action_result_fit",
+            "culture_fit",
+        ];
+
+        for (const key of METRIC_KEYS) {
+            const m = metrics[key];
+            if (!m) continue;
+            await resumeAnalysisRepository.createRecommendationMetricDetail(
+                {
+                    recommendationId,
+                    metricType: key,
+                    score: m.score,
+                    reasonText: m.reason_text || m.reasonText || "",
+                },
+                conn
+            );
+        }
+
+        await conn.commit();
+
+        console.log(
+            `[FINAL분석] 완료 — resumeId:${resumeId}, jobPostingId:${jobPostingId}, score:${analysis.overall_score}`
+        );
+
+    } catch (err) {
+        if (conn) {
+            try { await conn.rollback(); } catch (_) {}
+        }
+        throw err;
+
+    } finally {
+        if (conn) {
+            await conn.close();
+        }
+    }
+}
+
+async function getSessionsByMemberId(memberId) {
+    const conn = await db.getConnection();
+    try {
+        const sessions = await interviewRepository.findSessionsByMemberId(conn, memberId);
+        return { success: true, message: "면접 세션 목록 조회 성공", data: sessions };
+    } finally {
+        await conn.close();
+    }
+}
+
+
+async function getInterviewHistory(interviewSessionId) {
+    const conn = await db.getConnection();
+    try {
+        const data = await interviewRepository.findHistoryBySessionId(conn, interviewSessionId);
+        if (!data) {
+            const err = new Error("세션을 찾을 수 없습니다.");
+            err.statusCode = 404;
+            throw err;
+        }
+        return { success: true, message: "면접 이력 조회 성공", data };
+    } finally {
+        await conn.close();
+    }
+}
+
+async function getInterviewReport(interviewSessionId) {
+    const conn = await db.getConnection();
+    try {
+        const items = await interviewRepository.findReportBySessionId(conn, interviewSessionId);
+        return { success: true, message: "면접 리포트 조회 성공", data: items };
+    } finally {
+        await conn.close();
+    }
+}
+
 module.exports = {
+    getInterviewHistory,
+    getInterviewReport,
+    getSessionsByMemberId,
     startInterview,
     submitAnswer,
     finishInterview,

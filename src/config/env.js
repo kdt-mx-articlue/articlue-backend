@@ -101,6 +101,7 @@ const env = {
         allowedHeaders: arrayEnv("CORS_ALLOWED_HEADERS", [
             "Content-Type",
             "Authorization",
+            "X-GitHub-Session-Id",
         ]),
     },
 };
