@@ -473,8 +473,46 @@ async function findActionPlanByResumeJob(resumeId, jobPostingId, conn) {
     };
 }
 
+/**
+ * 특정 이력서 + 채용공고 + 분석단계의 추천 결과 단건 삭제
+ *
+ * 면접 완료 후 해당 공고의 FINAL 분석만 교체할 때 사용한다.
+ * 다른 공고의 FINAL 결과는 건드리지 않는다.
+ */
+async function deleteRecommendationByResumeJobStage(
+    { resumeId, jobPostingId, analysisStage },
+    conn
+) {
+    const bind = { resumeId, jobPostingId, analysisStage };
+
+    await conn.execute(
+        `
+        DELETE FROM RECOMMENDATION_METRIC_DETAIL
+        WHERE RECOMMENDATION_ID IN (
+            SELECT RECOMMENDATION_ID
+            FROM COMPANY_RECOMMENDATION
+            WHERE RESUME_ID = :resumeId
+              AND JOB_POSTING_ID = :jobPostingId
+              AND ANALYSIS_STAGE = :analysisStage
+        )
+        `,
+        bind
+    );
+
+    await conn.execute(
+        `
+        DELETE FROM COMPANY_RECOMMENDATION
+        WHERE RESUME_ID = :resumeId
+          AND JOB_POSTING_ID = :jobPostingId
+          AND ANALYSIS_STAGE = :analysisStage
+        `,
+        bind
+    );
+}
+
 module.exports = {
     deleteRecommendationResultsByResumeStage,
+    deleteRecommendationByResumeJobStage,
     createCompanyRecommendation,
     createRecommendationMetricDetail,
     findRecommendationsByResume,

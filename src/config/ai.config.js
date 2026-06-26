@@ -5,7 +5,7 @@ const aiClient = axios.create({
     headers: {
         "Content-Type": "application/json",
     },
-    timeout: 0,
+    timeout: Number(process.env.AI_TIMEOUT ?? 0),
 });
 
 console.log("AI_SERVER_BASE_URL:", process.env.AI_SERVER_BASE_URL || "http://127.0.0.1:5000");
