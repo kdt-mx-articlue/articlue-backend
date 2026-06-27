@@ -30,7 +30,7 @@ async function generate(articles, keywords) {
         };
 
         const response = await axios.post(`${FASTAPI_BASE_URL}/crawler/trend`, payload, {
-            timeout: 60000 
+            timeout: 0
         });
 
         if (!response.data || !Array.isArray(response.data.trends)) {

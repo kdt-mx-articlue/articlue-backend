@@ -12,8 +12,9 @@ const { oracledb } = require("../config/db");
  * - ANALYSIS_STAGE
  *
  * 삭제 대상:
- * 1. RECOMMENDATION_METRIC_DETAIL
- * 2. COMPANY_RECOMMENDATION
+ * 1. RECOMMENDATION_ACTION
+ * 2. RECOMMENDATION_METRIC_DETAIL
+ * 3. COMPANY_RECOMMENDATION
  *
  * 주의:
  * - RESUME 원본 테이블은 절대 건드리지 않는다.
@@ -33,7 +34,26 @@ async function deleteRecommendationResultsByResumeStage(
     };
 
     /*
-     * 1. 추천 지표 상세 삭제
+     * 1. RECOMMENDATION_ACTION 삭제 (FK_REC_ACTION_REC)
+     *
+     * RECOMMENDATION_ACTION은 COMPANY_RECOMMENDATION의 자식 테이블이므로
+     * 부모 삭제 전에 먼저 삭제해야 한다.
+     */
+    await conn.execute(
+        `
+        DELETE FROM RECOMMENDATION_ACTION
+        WHERE RECOMMENDATION_ID IN (
+            SELECT RECOMMENDATION_ID
+            FROM COMPANY_RECOMMENDATION
+            WHERE RESUME_ID = :resumeId
+              AND ANALYSIS_STAGE = :analysisStage
+        )
+        `,
+        bind
+    );
+
+    /*
+     * 2. 추천 지표 상세 삭제
      *
      * RECOMMENDATION_METRIC_DETAIL은 COMPANY_RECOMMENDATION의 자식 테이블이므로
      * 부모인 COMPANY_RECOMMENDATION 삭제 전에 먼저 삭제해야 한다.
@@ -52,7 +72,7 @@ async function deleteRecommendationResultsByResumeStage(
     );
 
     /*
-     * 2. 기업 추천 결과 삭제
+     * 3. 기업 추천 결과 삭제
      *
      * 같은 resumeId + analysisStage 기준으로 기존 추천 결과를 삭제한다.
      * 이후 AI가 반환한 추천 N개를 다시 INSERT한다.
@@ -484,6 +504,20 @@ async function deleteRecommendationByResumeJobStage(
     conn
 ) {
     const bind = { resumeId, jobPostingId, analysisStage };
+
+    await conn.execute(
+        `
+        DELETE FROM RECOMMENDATION_ACTION
+        WHERE RECOMMENDATION_ID IN (
+            SELECT RECOMMENDATION_ID
+            FROM COMPANY_RECOMMENDATION
+            WHERE RESUME_ID = :resumeId
+              AND JOB_POSTING_ID = :jobPostingId
+              AND ANALYSIS_STAGE = :analysisStage
+        )
+        `,
+        bind
+    );
 
     await conn.execute(
         `

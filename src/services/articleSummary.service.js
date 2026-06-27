@@ -17,8 +17,8 @@ async function generate(articles) {
             }))
         };
 
-        const response = await axios.post(`${FASTAPI_BASE_URL}/crawler/summary`, payload, { 
-            timeout: 120000 
+        const response = await axios.post(`${FASTAPI_BASE_URL}/crawler/summary`, payload, {
+            timeout: 0
         });
 
         if (!response.data || !Array.isArray(response.data.articles)) {
