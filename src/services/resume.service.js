@@ -11,7 +11,7 @@ const resumeAnalyzeService = require("./resumeAnalyze.service");
    상수
    ========================================================= */
 
-const MAX_RECOMMENDATION_LIMIT = 20;
+const MAX_RECOMMENDATION_LIMIT = 500;
 
 /* =========================================================
    공통 유틸
@@ -107,7 +107,7 @@ function parseRecommendationLimit(value) {
     }
 
     if (limit > MAX_RECOMMENDATION_LIMIT) {
-        throw createError("추천 결과는 최대 20개까지 요청할 수 있습니다.", 400);
+        throw createError("추천 결과는 최대 500개까지 요청할 수 있습니다.", 400);
     }
 
     return limit;

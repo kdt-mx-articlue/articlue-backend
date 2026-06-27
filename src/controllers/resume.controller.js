@@ -192,7 +192,7 @@ async function getJobMatch(req, res) {
 async function analyzeResume(req, res) {
     try {
         const { resumeId } = req.params;
-        const { analysisStage = "FINAL", recommendationLimit } = req.body;
+        const { analysisStage = "RESUME", recommendationLimit } = req.body;
 
         if (!resumeId) {
             return res.status(400).json({ success: false, message: "resumeId가 필요합니다." });
