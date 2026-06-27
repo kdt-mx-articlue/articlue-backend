@@ -15,7 +15,7 @@ const { startScheduler, stopScheduler } = require("./scheduler/article.scheduler
 const articleRoutes = require("./routes/article.route");
 
 // 라우팅포인트 load
-// const testRoutes = require("./routes/test.route.js");
+const testRoutes = require("./routes/test.route.js");
 const authRoutes = require("./routes/auth.route.js");
 const memberRoutes = require("./routes/member.route.js");
 const resumeRoutes = require("./routes/resume.route.js")
@@ -85,10 +85,13 @@ async function startServer() {
         startScheduler();
 
         // 4. 서버 시작
-        app.listen(env.port, () => {
+        const server = app.listen(env.port, () => {
             console.log(`아티클루 백엔드가 http://localhost:${env.port} 에서 정상 작동 중입니다.`);
             console.log(`웹 명세서(Swagger) 주소: http://localhost:${env.port}/api-docs`);
         });
+
+        // AI 분석 등 장시간 요청을 위해 소켓 타임아웃 무기한으로 설정
+        server.setTimeout(0);
 
     } catch (error) {
         console.error("서버 시작 실패:", error);
