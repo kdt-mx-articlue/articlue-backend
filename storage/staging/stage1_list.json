@@ -1,5 +1,41 @@
 [
   {
+    "id": "0c69ef7f2f1d9ba7dff8e027372aaaa16804c249bde4fe201a9e554db88ef049",
+    "title": "에이전틱 엔터프라이즈로의 전환\n데이터 사일로 허물고 ‘파일럿 지옥’ 탈출하라",
+    "preview": "Article at a Glance 세일즈포스는 AI 에이전트가 단순한 효율화를 넘어 인간 및 다른 에이전트와 협업하며 실질적인 비즈니스 가치를 창출하는 ‘에이전틱 엔터프라이즈(Agentic Enterprise)’를 미래 비즈니스 ...",
+    "url": "https://dbr.donga.com/article/view/1904/article_no/12184",
+    "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/06/4eedba098e5620401fd25b719445d19e.jpg",
+    "source": "DBR",
+    "publishedAt": "2026.07.01"
+  },
+  {
+    "id": "c631a28b166b7e2f9623edd2991e0b09e6b10a36f9f56d98ca070dc0b27bfa13",
+    "title": "“성공한 AI 전환은 100% CEO가 직접 챙겨\n독점 데이터를 워크플로에 내재화해야”",
+    "preview": "Article at a Glance 에이전틱 AI 시대의 성패는 기술이 아니라 리더십과 데이터 준비에 달려 있다. AI 전환 프로젝트의 100%는 CEO가 직접 관여한 경우에만 성공했으며 기업의 진짜 차별화 요소는 모델이 아니라 고유한 독점 데이터와  ...",
+    "url": "https://dbr.donga.com/article/view/1904/article_no/12183",
+    "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/06/bf0a91bbdfd86670945d85d672ac1ccb.jpg",
+    "source": "DBR",
+    "publishedAt": "2026.07.01"
+  },
+  {
+    "id": "7568c116769b08a2353a92981f11aa7cd593f8800d39c8404c4a219b4fc73294",
+    "title": "NH농협은행, Agentic AI Bank 전환 선언",
+    "preview": "AI 스타트업 인수해 기술 내재화 속도전“모든 업무 AI로 구현 ‘AI 풀 뱅킹’ 목표” Article at a Glance NH농협은행이 ‘에이전틱 AI 뱅크(Agentic AI Bank)&rsq ...",
+    "url": "https://dbr.donga.com/article/view/1904/article_no/12182",
+    "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/06/c643afb94ce80abefe4f4b357c98e29c.jpg",
+    "source": "DBR",
+    "publishedAt": "2026.07.01"
+  },
+  {
+    "id": "1fec3151c7aa6b47a332e5da87e94c94a840444b1122c5bb41c947e5cd3e7c08",
+    "title": "AI를 입맛대로 튜닝해 사용할 때\n업무 만족하는 ‘직장 웰빙’ 높아져",
+    "preview": "▶ Based on “Humanizing artificial intelligence: How employee appropriation of technology can improve well-being” (2026) by Anton ...",
+    "url": "https://dbr.donga.com/article/view/1904/article_no/12173",
+    "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/06/e1a5626d81f74563b7c24df585bf9f33.jpg",
+    "source": "DBR",
+    "publishedAt": "2026.07.01"
+  },
+  {
     "id": "5ebc902e5e5eacf0e8b0ae2f49963c51a1a8b1a67174b1d91e0d017425145e01",
     "title": "디지털 트윈으로 위기 사전 시뮬레이션\n경쟁사 취약점까지 시나리오에 담아라",
     "preview": "Article at a Glance 무역 전쟁과 지정학적 파고 앞에서 기존의 공급망 리스크 관리 매뉴얼은 한계에 직면했다. 고도의 복잡성과 불확실성을 돌파하려면 공급망 전반에 걸친 엔드투엔드 가시성 확보가 반드시 필요하다. 다음의 3단계 선제 대응 프 ...",
@@ -140,42 +176,6 @@
     "preview": "▶ Based on “How and for Whom Using Generative AI Affects Creativity: A Field Experiment” (2025) by Shuhua Sun, Zhuyi Angelina Li ...",
     "url": "https://dbr.donga.com/article/view/1904/article_no/12087",
     "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/04/fba746cff3285a4fb2e31c591fe8ecfb.jpg",
-    "source": "DBR",
-    "publishedAt": "2026.04.01"
-  },
-  {
-    "id": "7887e0e5467f133afc2f5c94488f54eccdbac6b1a25d909562be10429f290be0",
-    "title": "글 초안 스스로 쓴 뒤 AI 활용해야\n기억과 사고의 주도권 잃지 않아",
-    "preview": "▶ Based on “Your Brain on ChatGPT: Accumulation of Cognitive Debt when Using an AI Assistant for Essay Writing Task” (2025) by N ...",
-    "url": "https://dbr.donga.com/article/view/1904/article_no/12085",
-    "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/04/c7e070abce033461a4784c0f23ed6a96.jpg",
-    "source": "DBR",
-    "publishedAt": "2026.04.01"
-  },
-  {
-    "id": "acb19e774e61f88c0a98abaa2112e3ec3f9dc9c7973d57f9819abad45cb56aea",
-    "title": "‘에이전틱 엔터프라이즈’로의 전환",
-    "preview": "기업 내 AI 도입을 위한 전초전이 막을 내리고 있다. AI의 기술적 가능성을 확인하는 ‘실험’의 시기를 넘어 실질적인 성과를 거두는 ‘실행’의 시대가 전개될 전망이다. 특히 조직 내에서 AI가 스스로 판단하 ...",
-    "url": "https://dbr.donga.com/article/view/1904/article_no/12084",
-    "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/04/9024f2aa3ebfd6e6126028b1be38640b.jpg",
-    "source": "DBR",
-    "publishedAt": "2026.04.01"
-  },
-  {
-    "id": "61a628bffe24ea72b89b36f8edbe910a85ce7263d62344d9a298d2e07102f4eb",
-    "title": "프롬프트에 담긴 고객 의도 분석해\nAI가 답으로 호출할 좌표를 설계하라",
-    "preview": "Article at a GlanceAI 시대가 도래하며 소비자의 검색 행태가 단순한 키워드 중심에서 맥락과 조건이 상세히 담긴 대화형 프롬프트로 진화했다. 이에 브랜드의 관리 대상 역시 검색어에서 소비자의 의도가 드러난 프롬프트로 전환돼야 한다. 이를 ...",
-    "url": "https://dbr.donga.com/article/view/1904/article_no/12077",
-    "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/03/d776cf0dd490ec198a81ddd54f244ed5.jpg",
-    "source": "DBR",
-    "publishedAt": "2026.04.01"
-  },
-  {
-    "id": "bcd809103a29b251593d8b6261edbf841ba8b76e4adac5b4ea01faa90da23e0d",
-    "title": "“손주 같은 AI 로봇이 노인 말벗-건강 체크\n전 연령대 걸친 돌봄 로봇 생태계가 목표”",
-    "preview": "Article at a Glance ‘효돌’은 어르신들의 일상과 정서를 돌보는 인공지능(AI) 로봇이다. 어르신들의 식사와 투약 여부를 챙겨 건강한 일상을 영위할 수 있도록 돕고 말벗이 돼 정서적 고립감을 해소한다. 어르신의 음성 ...",
-    "url": "https://dbr.donga.com/article/view/1904/article_no/12074",
-    "thumbnail": "https://dbr.donga.com/upload_dir/article/2026/03/ba6e7d761417f71417a7c44f4aeba0fd.jpg",
     "source": "DBR",
     "publishedAt": "2026.04.01"
   }

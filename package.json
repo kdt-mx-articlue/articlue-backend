@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node ./src/app.js",
+    "dev": "nodemon ./src/app.js"
   },
   "keywords": [],
   "author": "",
@@ -16,8 +18,9 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "node-cron": "^4.2.1",
     "multer": "^2.2.0",
+    "node-cron": "^4.2.1",
+    "nodemon": "^3.1.14",
     "oracledb": "6.9.0",
     "playwright": "^1.61.0",
     "swagger-jsdoc": "^6.3.0",

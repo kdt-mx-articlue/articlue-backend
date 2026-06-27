@@ -28,7 +28,7 @@ async function generate(articles, trends) {
         };
 
         const response = await axios.post(`${FASTAPI_BASE_URL}/crawler/prompt-context`, payload, {
-            timeout: 60000 
+            timeout: 0
         });
 
         if (

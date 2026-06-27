@@ -1,18 +1,8 @@
 const FormData = require("form-data");
 const { aiClient } = require("../config/ai.config");
 
-console.log("interviewGraphAi.service loaded");
-console.log("aiClient in graph service:", !!aiClient);
-console.log("aiClient.post in graph service:", typeof aiClient?.post);
-
 async function runInterviewGraph(payload) {
     try {
-        console.log("FastAPI 호출 직전");
-        console.log("payload.eventType:", payload?.eventType);
-        console.log("payload.session:", payload?.session);
-        console.log("aiClient exists:", !!aiClient);
-        console.log("aiClient.post type:", typeof aiClient?.post);
-
         const response = await aiClient.post(
             "/api/interview-graph/run",
             payload,
@@ -22,9 +12,6 @@ async function runInterviewGraph(payload) {
                 },
             }
         );
-
-        console.log("FastAPI 응답 상태:", response.status);
-        console.log("FastAPI 응답 data:", response.data);
 
         return response.data;
 
