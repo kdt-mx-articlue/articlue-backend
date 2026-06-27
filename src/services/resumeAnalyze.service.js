@@ -19,7 +19,7 @@ const RADAR_METRIC_TYPES = [
     "culture_fit",
 ];
 
-const MAX_RECOMMENDATION_LIMIT = 20;
+const MAX_RECOMMENDATION_LIMIT = 500;
 
 function isBlank(value) {
     return value === undefined || value === null || String(value).trim() === "";
@@ -262,7 +262,7 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
     }
 
     if (jobMatches.length > MAX_RECOMMENDATION_LIMIT) {
-        throw createError("AI 추천 결과는 최대 20개까지만 저장할 수 있습니다.", 502);
+        throw createError("AI 추천 결과는 최대 500개까지만 저장할 수 있습니다.", 502);
     }
 
     const jobPostingIdSet = new Set();
@@ -300,7 +300,6 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
                 item.analysis_stage ||
                 nestedAnalysis.analysisStage ||
                 nestedAnalysis.analysis_stage ||
-                nestedAnalysis.type ||
                 analysisStage,
             overallScore:
                 item.overallScore ||
@@ -418,22 +417,17 @@ async function requestResumeAnalysisToAi(payload) {
         process.env.AI_RESUME_ANALYSIS_PATH ||
         "/pipeline/analyze";
 
-    const timeout =
-        Number(process.env.AI_RESUME_ANALYSIS_TIMEOUT_MS) ||
-        120000;
-
     try {
         console.log("[AI REQUEST TARGET]", {
             baseURL: aiClient.defaults?.baseURL,
             path,
-            timeout,
             aiClientPostType: typeof aiClient.post,
         });
 
         const response = await aiClient.post(
             path,
             payload,
-            { timeout }
+            { timeout: 0 }
         );
 
         return response.data;
