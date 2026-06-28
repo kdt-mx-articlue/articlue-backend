@@ -659,6 +659,140 @@ async function saveAiAnalysisResult({
     };
 }
 
+async function requestSingleJobAnalysisToAi(payload) {
+    const path =
+        process.env.AI_SINGLE_JOB_ANALYSIS_PATH ||
+        "/pipeline/analyze-single";
+
+    try {
+        const response = await aiClient.post(
+            path,
+            payload,
+            { timeout: 0 }
+        );
+        return response.data;
+    } catch (error) {
+        console.error("[AI SINGLE JOB ANALYSIS ERROR]", {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message,
+        });
+        throw createError(
+            "AI 서버 단일 기업 분석 요청에 실패했습니다.",
+            error.response?.status || 502
+        );
+    }
+}
+
+/**
+ * 단일 공고에 대한 GPT 상세 분석을 수행하고 DB에 저장한다.
+ * 기존 COMPANY_RECOMMENDATION 점수는 변경하지 않고,
+ * PORTFOLIO_DIAGNOSIS + RECOMMENDATION_ACTION만 갱신한다.
+ */
+async function analyzeSingleJob({ resumeId, jobPostingId, resumeDetail }) {
+    if (!resumeDetail) {
+        throw createError("이력서 상세 데이터가 없습니다.", 500);
+    }
+
+    const sanitizedResumeDetail = replaceNullWithEmptyString(resumeDetail);
+
+    const aiPayload = {
+        success: true,
+        message: "이력서 상세 조회 성공",
+        data: sanitizedResumeDetail,
+        job_posting_id: Number(jobPostingId),
+        analysis_stage: "RESUME",
+    };
+
+    console.log(`[SINGLE JOB ANALYSIS] resumeId=${resumeId}, jobPostingId=${jobPostingId}`);
+
+    const aiResponse = await requestSingleJobAnalysisToAi(aiPayload);
+    const result = aiResponse?.result || aiResponse;
+
+    const conn = await getConnection();
+    try {
+        // 기존 추천 레코드 조회 (recommendation_action FK 참조용)
+        const rec = await analysisRepository.findRecommendationByResumeAndJob(
+            conn,
+            resumeId,
+            jobPostingId,
+            "RESUME"
+        );
+
+        if (!rec) {
+            throw createError(
+                `이력서(${resumeId}) + 공고(${jobPostingId})의 1차 분석 결과가 없습니다. 이력서를 먼저 제출해주세요.`,
+                404
+            );
+        }
+
+        const recommendationId = rec.recommendationId;
+
+        // portfolio_diagnosis 갱신 (DELETE → INSERT)
+        const diagnosis = result?.diagnosis;
+        if (diagnosis && typeof diagnosis === "object") {
+            await analysisRepository.deletePortfolioDiagnosisByResumeJob(resumeId, jobPostingId, conn);
+            await analysisRepository.createPortfolioDiagnosis({
+                resumeId,
+                jobPostingId,
+                diagnosisSummary:            diagnosis.diagnosis_summary             ?? null,
+                techStackWeakness:           diagnosis.tech_stack_weakness           ?? null,
+                projectExperienceWeakness:   diagnosis.project_experience_weakness   ?? null,
+                businessResultWeakness:      diagnosis.business_result_weakness      ?? null,
+                domainUnderstandingWeakness: diagnosis.domain_understanding_weakness ?? null,
+                improvementPriority:         diagnosis.improvement_priority          ?? null,
+            }, conn);
+        }
+
+        // recommendation_action 갱신 (DELETE → INSERT)
+        const actionPlans = Array.isArray(result?.action_plans) ? result.action_plans : [];
+        if (actionPlans.length > 0) {
+            await analysisRepository.deleteRecommendationActionsByRecommendationId(recommendationId, conn);
+            for (const plan of actionPlans) {
+                await analysisRepository.createRecommendationAction({
+                    recommendationId,
+                    category:    plan.category            ?? "ACTION",
+                    title:       plan.action_plan_title   ?? "액션 플랜",
+                    description: plan.action_plan_summary ?? "",
+                    type:        "RESUME",
+                    priority:    plan.priority            ?? null,
+                }, conn);
+            }
+        }
+
+        // metric reason text 갱신 (SCORE 유지, REASON_TEXT만 UPDATE)
+        const reasons = result?.reasons ?? {};
+        for (const metricType of RADAR_METRIC_TYPES) {
+            const reasonText = reasons[metricType];
+            if (reasonText && reasonText !== "-") {
+                await analysisRepository.updateMetricReasonText(
+                    recommendationId,
+                    metricType,
+                    reasonText,
+                    conn
+                );
+            }
+        }
+
+        await conn.commit();
+
+        console.log(`[SINGLE JOB ANALYSIS] 저장 완료: recommendationId=${recommendationId}`);
+
+        return {
+            success: true,
+            message: "단일 기업 상세 분석 완료",
+            data: { resumeId, jobPostingId, recommendationId },
+        };
+
+    } catch (error) {
+        await conn.rollback();
+        throw error;
+    } finally {
+        await conn.close();
+    }
+}
+
 module.exports = {
     analyzeAndSave,
+    analyzeSingleJob,
 };

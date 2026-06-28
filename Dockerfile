@@ -1,13 +1,34 @@
-FROM node:20-alpine
+# node:20-slim (Debian 기반 — Oracle Instant Client는 glibc 필요, Alpine 불가)
+FROM node:20-slim
+
 WORKDIR /usr/src/app
 
-# 의존성 먼저 복사 (캐싱 효율화로 빌드 속도 향상)
-COPY package*.json ./
-RUN npm install
+# Oracle Instant Client 의존성
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libaio1 \
+    wget \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
 
-# 소스코드 전체 복사
+# Oracle Instant Client 21.12 Basic Lite (amd64)
+# Oracle 11g 서버에 thick mode로 연결
+RUN wget -q https://download.oracle.com/otn_software/linux/instantclient/2112000/instantclient-basiclite-linux.x64-21.12.0.0.0dbru.zip \
+      -O /tmp/ic.zip \
+    && unzip -q /tmp/ic.zip -d /opt/oracle \
+    && rm /tmp/ic.zip \
+    && echo /opt/oracle/instantclient_21_12 > /etc/ld.so.conf.d/oracle-instantclient.conf \
+    && ldconfig
+
+ENV ORACLE_CLIENT_LIB_DIR=/opt/oracle/instantclient_21_12
+
+# 의존성 먼저 복사 (레이어 캐시 활용)
+COPY package*.json ./
+RUN npm ci
+
+# 소스 복사
 COPY . .
 
 EXPOSE 3000
-# package.json에 "dev": "nodemon app.js" 형태의 스크립트가 있어야 합니다.
-CMD ["npm", "run", "dev"]
+
+# 배포 환경 — npm start = node ./src/app.js
+CMD ["npm", "start"]
