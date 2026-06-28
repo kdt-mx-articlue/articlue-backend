@@ -76,7 +76,7 @@ const env = {
         user: requireEnv("ORACLE_USER"),
         password: requireEnv("ORACLE_PASSWORD"),
         connectString: `${requireEnv("ORACLE_HOST")}:${numberEnv("ORACLE_PORT", 1521)}/${process.env.ORACLE_SERVICE_NAME || "xe"}`,
-        clientLibDir: requireEnv("ORACLE_CLIENT_LIB_DIR"),
+        clientLibDir: process.env.ORACLE_CLIENT_LIB_DIR || "",
         poolAlias: process.env.ORACLE_POOL_ALIAS || "main",
         poolMin: numberEnv("ORACLE_POOL_MIN", 0),
         poolMax: numberEnv("ORACLE_POOL_MAX", 1),

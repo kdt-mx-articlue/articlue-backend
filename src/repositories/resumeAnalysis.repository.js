@@ -544,6 +544,48 @@ async function deleteRecommendationByResumeJobStage(
     );
 }
 
+/**
+ * 특정 이력서의 RESUME 단계 추천 결과 건수 조회
+ *
+ * 사용 목적:
+ * - 이력서는 있으나 1차 분석이 없는 오류 케이스 감지
+ * - count = 0 이면 중간 오류로 분석이 저장되지 않은 상태
+ */
+async function countResumeRecommendations(resumeId, conn) {
+    const sql = `
+        SELECT COUNT(*) AS "cnt"
+        FROM COMPANY_RECOMMENDATION
+        WHERE RESUME_ID = :resumeId
+          AND ANALYSIS_STAGE = 'RESUME'
+    `;
+
+    const result = await conn.execute(
+        sql,
+        { resumeId: Number(resumeId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows[0]?.cnt ?? 0;
+}
+
+/**
+ * 단일 기업 상세 분석 시 metric reason text 갱신
+ * SCORE는 변경하지 않고 REASON_TEXT만 UPDATE
+ */
+async function updateMetricReasonText(recommendationId, metricType, reasonText, conn) {
+    const sql = `
+        UPDATE RECOMMENDATION_METRIC_DETAIL
+        SET REASON_TEXT = :reasonText
+        WHERE RECOMMENDATION_ID = :recommendationId
+          AND METRIC_TYPE = :metricType
+    `;
+    return await conn.execute(sql, {
+        reasonText,
+        recommendationId: Number(recommendationId),
+        metricType,
+    });
+}
+
 module.exports = {
     deleteRecommendationResultsByResumeStage,
     deleteRecommendationByResumeJobStage,
@@ -557,4 +599,6 @@ module.exports = {
     deletePortfolioDiagnosisByResumeJob,
     deleteRecommendationActionsByRecommendationId,
     findActionPlanByResumeJob,
+    countResumeRecommendations,
+    updateMetricReasonText,
 };

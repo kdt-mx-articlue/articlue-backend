@@ -134,6 +134,7 @@ async function createExperience(experience, resumeId, conn) {
             RESUME_ID,
             EXPERIENCE_TYPE,
             EXPERIENCE_NAME,
+            CONTEXT,
             START_YM,
             END_YM
         )
@@ -143,6 +144,7 @@ async function createExperience(experience, resumeId, conn) {
             :resumeId,
             :experienceType,
             :experienceName,
+            :context,
             :startYm,
             :endYm
         )
@@ -154,8 +156,9 @@ async function createExperience(experience, resumeId, conn) {
             resumeId,
             experienceType: experience.experienceType,
             experienceName: experience.experienceName,
-            startYm: experience.startYm || null,
-            endYm: experience.endYm || null,
+            context:        experience.context || null,
+            startYm:        experience.startYm || null,
+            endYm:          experience.endYm   || null,
         }
     );
 }
@@ -312,6 +315,44 @@ async function createCoverLetterItem(item, coverLetterId, conn) {
 }
 
 /**
+ * 이력서의 자기소개서 ID 조회 (최신 1건)
+ */
+async function findCoverLetterByResumeId(resumeId, conn) {
+    const sql = `
+        SELECT COVER_LETTER_ID AS "coverLetterId"
+        FROM (
+            SELECT COVER_LETTER_ID
+            FROM COVER_LETTER
+            WHERE RESUME_ID = :resumeId
+            ORDER BY CREATE_AT DESC
+        )
+        WHERE ROWNUM = 1
+    `;
+    const result = await conn.execute(
+        sql,
+        { resumeId: Number(resumeId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows[0]?.coverLetterId ?? null;
+}
+
+/**
+ * 자기소개서 문항 전체 삭제
+ */
+async function deleteAllCoverLetterItems(coverLetterId, conn) {
+    const sql = `DELETE FROM COVER_LETTER_ITEM WHERE COVER_LETTER_ID = :coverLetterId`;
+    await conn.execute(sql, { coverLetterId: Number(coverLetterId) }, { autoCommit: false });
+}
+
+/**
+ * 자기소개서 UPDATE_AT 갱신
+ */
+async function updateCoverLetterTimestamp(coverLetterId, conn) {
+    const sql = `UPDATE COVER_LETTER SET UPDATE_AT = SYSDATE WHERE COVER_LETTER_ID = :coverLetterId`;
+    await conn.execute(sql, { coverLetterId: Number(coverLetterId) }, { autoCommit: false });
+}
+
+/**
  * 포트폴리오 생성
  */
 async function createPortfolio(portfolio, resumeId, conn) {
@@ -435,6 +476,7 @@ async function getResumeDetail(resumeId, conn) {
             EX.EXPERIENCE_ID AS EXPERIENCE_ID,
             EX.EXPERIENCE_TYPE AS EXPERIENCE_TYPE,
             EX.EXPERIENCE_NAME AS EXPERIENCE_NAME,
+            EX.CONTEXT AS EXPERIENCE_CONTEXT,
             EX.START_YM AS EXPERIENCE_START_YM,
             EX.END_YM AS EXPERIENCE_END_YM,
 
@@ -571,6 +613,51 @@ async function getResumeDetail(resumeId, conn) {
     return result.rows;
 }
 
+/**
+ * 이력서 ID로 회원 ID 조회
+ */
+async function findMemberIdByResume(resumeId, conn) {
+    const sql = `
+        SELECT MEMBER_ID AS "memberId"
+        FROM RESUME
+        WHERE RESUME_ID = :resumeId
+    `;
+    const result = await conn.execute(
+        sql,
+        { resumeId: Number(resumeId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows[0]?.memberId ?? null;
+}
+
+/**
+ * 회원의 가장 최근 이력서 ID 조회
+ *
+ * 사용 목적:
+ * - 이력서 제출 시 기존 이력서 존재 여부 확인
+ * - 이력서가 있으나 1차 분석이 없는 오류 케이스 감지용
+ */
+async function findLatestResumeByMember(memberId, conn) {
+    const sql = `
+        SELECT RESUME_ID AS "resumeId"
+        FROM (
+            SELECT RESUME_ID
+            FROM RESUME
+            WHERE MEMBER_ID = :memberId
+            ORDER BY CREATE_AT DESC
+        )
+        WHERE ROWNUM = 1
+    `;
+
+    const result = await conn.execute(
+        sql,
+        { memberId: Number(memberId) },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows[0]?.resumeId ?? null;
+}
+
 module.exports = {
     // 생성
     createResume,
@@ -583,7 +670,14 @@ module.exports = {
     createCoverLetterItem,
     createPortfolio,
     createResumeTechStack,
-    
+
     // 조회
     getResumeDetail,
+    findMemberIdByResume,
+    findLatestResumeByMember,
+
+    // 자기소개서
+    findCoverLetterByResumeId,
+    deleteAllCoverLetterItems,
+    updateCoverLetterTimestamp,
 };
