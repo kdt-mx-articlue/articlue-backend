@@ -7,12 +7,14 @@ let poolInitialized = false;
 let oracleClientInitialized = false;
 
 function validateOracleClientLibDir() {
-    const ociPath = path.join(env.oracle.clientLibDir, "oci.dll");
+    // Windows: oci.dll / Linux: libclntsh.so
+    const libFile = process.platform === "win32" ? "oci.dll" : "libclntsh.so";
+    const ociPath = path.join(env.oracle.clientLibDir, libFile);
 
     if (!fs.existsSync(ociPath)) {
         throw new Error(
             [
-                "Oracle 11g Client 라이브러리를 찾을 수 없습니다.",
+                "Oracle Client 라이브러리를 찾을 수 없습니다.",
                 `확인한 경로: ${ociPath}`,
                 "ORACLE_CLIENT_LIB_DIR 값이 올바른지 확인하세요.",
             ].join("\n")
@@ -22,6 +24,12 @@ function validateOracleClientLibDir() {
 
 function initOracleClientFor11g() {
     if (oracleClientInitialized || oracledb.thin === false) {
+        return;
+    }
+
+    // ORACLE_CLIENT_LIB_DIR 미설정 → thin mode (Oracle 12.1+ / Docker 환경)
+    if (!env.oracle.clientLibDir) {
+        console.log("Oracle thin mode 사용 (ORACLE_CLIENT_LIB_DIR 미설정)");
         return;
     }
 

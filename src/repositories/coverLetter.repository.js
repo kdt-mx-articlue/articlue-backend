@@ -94,6 +94,22 @@ async function findCoverLetterById(coverLetterId, conn) {
 }
 
 /**
+ * 동일 이력서+공고의 기존 자소서 삭제 (재생성 시 중복 방지)
+ */
+async function deleteCoverLetterByResumeJob(resumeId, jobPostingId, conn) {
+    const sql = `
+        DELETE FROM GENERATED_DOCUMENT
+        WHERE RESUME_ID      = :resumeId
+          AND JOB_POSTING_ID = :jobPostingId
+          AND DOCUMENT_TYPE  = 'COVER_LETTER'
+    `;
+    await conn.execute(sql, {
+        resumeId:     Number(resumeId),
+        jobPostingId: Number(jobPostingId),
+    }, { autoCommit: false });
+}
+
+/**
  * 자소서 내용 수정
  */
 async function updateCoverLetterContent(coverLetterId, items, conn) {
@@ -113,4 +129,5 @@ module.exports = {
     findCoverLettersByMember,
     findCoverLetterById,
     updateCoverLetterContent,
+    deleteCoverLetterByResumeJob,
 };
