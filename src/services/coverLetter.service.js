@@ -1,12 +1,12 @@
 const { getConnection } = require("../config/db");
 const aiConfig = require("../config/ai.config");
 const aiClient = aiConfig.aiClient || aiConfig;
-const resumeRepo = require("../repositories/resume.repository");
 const resumeService = require("./resume.service");
+const coverLetterRepo = require("../repositories/coverLetter.repository");
 
 /**
- * 자소서 생성 + COVER_LETTER_ITEM UPSERT
- * 기존 항목 삭제 후 AI 생성 항목으로 교체
+ * 자소서 생성 + GENERATED_DOCUMENT 저장
+ * 동일 이력서+공고 기존 자소서 삭제 후 재생성
  */
 async function generateAndSave({ memberId, resumeId, jobPostingId, companyName, jobTitle, jobDescription, questions }) {
     // 1. 이력서 상세 데이터 조회
@@ -27,33 +27,14 @@ async function generateAndSave({ memberId, resumeId, jobPostingId, companyName, 
         throw new Error("AI 자소서 생성 실패");
     }
 
-    // 3. COVER_LETTER_ITEM UPSERT
+    // 3. GENERATED_DOCUMENT 저장
     const conn = await getConnection();
     try {
-        let coverLetterId = await resumeRepo.findCoverLetterByResumeId(resumeId, conn);
-
-        if (!coverLetterId) {
-            // 없으면 새로 생성
-            coverLetterId = await resumeRepo.createCoverLetter(resumeId, conn);
-        } else {
-            // 있으면 기존 항목 전체 삭제 후 타임스탬프 갱신
-            await resumeRepo.deleteAllCoverLetterItems(coverLetterId, conn);
-            await resumeRepo.updateCoverLetterTimestamp(coverLetterId, conn);
-        }
-
-        // 새 항목 INSERT
-        for (let i = 0; i < items.length; i++) {
-            await resumeRepo.createCoverLetterItem(
-                {
-                    questionOrder: i + 1,
-                    subTitle:      items[i].question ?? `문항 ${i + 1}`,
-                    content:       items[i].answer   ?? "",
-                },
-                coverLetterId,
-                conn
-            );
-        }
-
+        await coverLetterRepo.deleteCoverLetterByResumeJob(resumeId, jobPostingId, conn);
+        const coverLetterId = await coverLetterRepo.createCoverLetter(
+            { resumeId, jobPostingId, companyName, jobTitle, items },
+            conn
+        );
         await conn.commit();
         return { coverLetterId, items };
     } catch (e) {

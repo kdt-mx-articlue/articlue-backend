@@ -205,11 +205,19 @@ async function findRecommendationsByResume(conn, resumeId, analysisStage) {
             cr.ANALYSIS_STAGE       AS "analysisStage",
             cr.OVERALL_SCORE        AS "overallScore",
             cr.RECOMMEND_RANK       AS "recommendRank",
+            c.company_name          AS "companyName",
+            c.industry_category     AS "industryCategory",
+            jp.job_name             AS "jobName",
+            jp.career_condition     AS "careerCondition",
+            jp.original_url         AS "originalUrl",
+            jp.deadline_date        AS "deadlineDate",
             rmd.METRIC_TYPE         AS "metricType",
             rmd.SCORE               AS "metricScore",
             rmd.REASON_TEXT         AS "reasonText"
         FROM COMPANY_RECOMMENDATION cr
         LEFT JOIN RECOMMENDATION_METRIC_DETAIL rmd ON cr.RECOMMENDATION_ID = rmd.RECOMMENDATION_ID
+        LEFT JOIN job_posting jp ON cr.JOB_POSTING_ID = jp.JOB_POSTING_ID
+        LEFT JOIN company c ON jp.COMPANY_ID = c.COMPANY_ID
         WHERE cr.RESUME_ID = :resumeId
           AND cr.ANALYSIS_STAGE = :analysisStage
         ORDER BY cr.RECOMMEND_RANK ASC NULLS LAST, cr.OVERALL_SCORE DESC NULLS LAST
