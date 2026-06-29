@@ -123,8 +123,7 @@ async function synthesizeSpeech(text) {
         };
 
     } catch (error) {
-        console.error("ElevenLabs TTS 호출 실패, 텍스트 질문만 반환합니다.", error.message);
-        return null;
+        throw buildElevenLabsError(error, "ElevenLabs TTS 호출 실패");
     }
 }
 

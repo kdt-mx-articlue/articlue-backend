@@ -4,7 +4,9 @@ const interviewRepository = require("../repositories/interview.repository");
 const interviewContextRepository = require("../repositories/interviewContext.repository");
 const interviewChatbotAiService = require("./interviewChatbotAi.service");
 const elevenlabsService = require("./voice/elevenlabs.service");
+const openaiSpeechService = require("./voice/openaiSpeech.service");
 const resumeAnalysisRepository = require("../repositories/resumeAnalysis.repository");
+const resumeRepository = require("../repositories/resume.repository");
 
 const {
     DEFAULT_RUNTIME_CONFIG,
@@ -288,7 +290,13 @@ async function resolveAnswerContent({ chatMode, body, file }) {
             throw createError(400, "VOICE 모드에서는 audioFile이 필요합니다.");
         }
 
-        const text = await elevenlabsService.transcribeAudio(file);
+        let text;
+        try {
+            text = await elevenlabsService.transcribeAudio(file);
+        } catch (e) {
+            console.warn("ElevenLabs STT 실패, OpenAI Whisper로 폴백합니다.", e.message);
+            text = await openaiSpeechService.transcribeAudio(file);
+        }
 
         if (!text || !text.trim()) {
             throw createError(400, "음성 답변을 텍스트로 변환하지 못했습니다.");
@@ -556,14 +564,17 @@ async function finishInterview(params) {
     removeRuntimeConfig(interviewSessionId);
 
     // 면접 완료 후 2차 FINAL 분석 자동 트리거 (비동기 - 실패해도 면접 결과에 영향 없음)
-    triggerFinalAnalysis({
-        resumeId: finishContext.config.resumeId,
-        jobPostingId: finishContext.config.jobPostingId,
-        companyName: finishContext.config.targetCompany || "",
-        finalReport: graphResult.finalReport,
-    }).catch((err) => {
-        console.error("[FINAL분석] 자동 트리거 실패 (무시됨):", err.message);
-    });
+    // 세션 생성 이후 이력서가 재업로드된 경우를 대비해 회원의 최신 resumeId를 조회해서 사용
+    resolveLatestResumeId(finishContext.config.resumeId)
+        .then((latestResumeId) => triggerFinalAnalysis({
+            resumeId: latestResumeId,
+            jobPostingId: finishContext.config.jobPostingId,
+            companyName: finishContext.config.targetCompany || "",
+            finalReport: graphResult.finalReport,
+        }))
+        .catch((err) => {
+            console.error("[FINAL분석] 자동 트리거 실패 (무시됨):", err.message);
+        });
 
     return {
         interviewSessionId,
@@ -1036,7 +1047,12 @@ async function buildQuestionAudioIfNeeded(config, questionContent) {
         return null;
     }
 
-    return elevenlabsService.synthesizeSpeech(questionContent);
+    try {
+        return await elevenlabsService.synthesizeSpeech(questionContent);
+    } catch (e) {
+        console.warn("ElevenLabs TTS 실패, OpenAI TTS로 폴백합니다.", e.message);
+        return await openaiSpeechService.synthesizeSpeech(questionContent);
+    }
 }
 
 function createError(status, message) {
@@ -1079,8 +1095,27 @@ function buildWeakPoints(resumeRec) {
  * COMPANY_RECOMMENDATION (FINAL stage)에 저장한다.
  * 해당 resumeId + jobPostingId 의 FINAL 결과만 교체한다.
  */
+/**
+ * 세션의 resumeId로 해당 회원의 최신 resumeId를 반환한다.
+ * 이력서 재업로드 시 세션에 저장된 resumeId가 구버전일 수 있으므로
+ * 항상 최신 이력서 기준으로 FINAL 분석을 수행하기 위해 사용한다.
+ */
+async function resolveLatestResumeId(sessionResumeId) {
+    const conn = await db.getConnection();
+    try {
+        const memberId = await resumeRepository.findMemberIdByResume(sessionResumeId, conn);
+        if (!memberId) return sessionResumeId;
+        const latestResumeId = await resumeRepository.findLatestResumeByMember(memberId, conn);
+        return latestResumeId ?? sessionResumeId;
+    } finally {
+        await conn.close();
+    }
+}
+
 async function triggerFinalAnalysis({ resumeId, jobPostingId, companyName, finalReport }) {
     let conn;
+
+    console.log(`[FINAL분석] 시작 — resumeId:${resumeId}, jobPostingId:${jobPostingId}, companyName:${companyName}`);
 
     try {
         conn = await db.getConnection();
@@ -1189,10 +1224,26 @@ async function triggerFinalAnalysis({ resumeId, jobPostingId, companyName, final
             );
         }
 
+        // 2차 액션 플랜 저장
+        const actionPlans = analysis.action_plans || [];
+        for (const plan of actionPlans) {
+            await resumeAnalysisRepository.createRecommendationAction(
+                {
+                    recommendationId,
+                    category:    plan.category            ?? "ACTION",
+                    title:       plan.action_plan_title   ?? "액션 플랜",
+                    description: plan.action_plan_summary ?? "",
+                    type:        "FINAL",
+                    priority:    plan.priority            ?? 1,
+                },
+                conn
+            );
+        }
+
         await conn.commit();
 
         console.log(
-            `[FINAL분석] 완료 — resumeId:${resumeId}, jobPostingId:${jobPostingId}, score:${analysis.overall_score}`
+            `[FINAL분석] 완료 — resumeId:${resumeId}, jobPostingId:${jobPostingId}, score:${analysis.overall_score}, 액션플랜:${actionPlans.length}개`
         );
 
     } catch (err) {
