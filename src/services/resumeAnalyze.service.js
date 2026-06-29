@@ -258,7 +258,7 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
     const jobMatches = getAiJobMatches(aiRoot);
 
     if (jobMatches.length === 0) {
-        throw createError("AI 추천 결과가 비어 있습니다.", 502);
+        return { analysisItems: [], skippedItems: [] };
     }
 
     if (jobMatches.length > MAX_RECOMMENDATION_LIMIT) {
