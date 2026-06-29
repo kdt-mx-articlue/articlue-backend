@@ -15,4 +15,6 @@ router.get("/:resumeId/action-plan", resumeController.getActionPlan);
 
 router.post("/:resumeId/analyze", resumeController.analyzeResume);
 
+router.post("/:resumeId/analyze-detail", resumeController.analyzeJobDetail);
+
 module.exports = router;

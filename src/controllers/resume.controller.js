@@ -214,6 +214,30 @@ async function analyzeResume(req, res) {
     }
 }
 
+/**
+ * POST /api/resumes/:resumeId/analyze-detail?jobPostingId=X
+ * 특정 공고 1개에 대한 GPT 상세 분석 온디맨드 실행
+ */
+async function analyzeJobDetail(req, res) {
+    try {
+        const { resumeId } = req.params;
+        const { jobPostingId } = req.query;
+
+        if (!jobPostingId) {
+            return res.status(400).json({ success: false, message: "jobPostingId가 필요합니다." });
+        }
+
+        const result = await resumeService.analyzeSingleJob({ resumeId, jobPostingId });
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error(error);
+        return res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.message || "단일 기업 분석 실패",
+        });
+    }
+}
+
 module.exports = {
     getActionPlan,
     createResume,
@@ -221,4 +245,5 @@ module.exports = {
     getResumeRecommendations,
     getJobMatch,
     analyzeResume,
+    analyzeJobDetail,
 };

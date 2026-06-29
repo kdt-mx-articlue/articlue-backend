@@ -795,8 +795,44 @@ async function createResumeAndAnalyze(resume) {
         ])
     );
 
-    const createResult = await createResume(resume);
-    const resumeId = createResult.data.resumeId;
+    const memberId = parsePositiveInt(
+        pick(resume, ["memberId", "member_id"]),
+        "회원번호가 올바르지 않습니다."
+    );
+
+    /*
+     * INSERT 분기 로직
+     *
+     * 이력서가 있는데 RESUME 단계 분석이 없으면 → 중간 오류 케이스
+     * 이 경우에만 INSERT 스킵하고 기존 resumeId 재사용
+     * 그 외(이력서 없음, 또는 이력서+분석 모두 있음) → 새 이력서 INSERT
+     */
+    let resumeId;
+    let insertCount = null;
+    let githubResult = null;
+
+    const checkConn = await getConnection();
+    try {
+        const existingResumeId = await resumeRepository.findLatestResumeByMember(memberId, checkConn);
+        if (existingResumeId) {
+            const recCount = await resumeAnalysisRepository.countResumeRecommendations(existingResumeId, checkConn);
+            if (recCount === 0) {
+                // 이력서는 있으나 1차 분석 없음 → 오류 케이스, INSERT 스킵
+                resumeId = existingResumeId;
+                console.log(`[RESUME] 기존 이력서 재사용 (resumeId=${resumeId}), INSERT 스킵`);
+            }
+        }
+    } finally {
+        await checkConn.close();
+    }
+
+    if (!resumeId) {
+        // 정상 케이스: 새 이력서 INSERT
+        const createResult = await createResume(resume);
+        resumeId = createResult.data.resumeId;
+        insertCount = createResult.data.insertCount;
+        githubResult = createResult.data.github;
+    }
 
     const resumeDetailResult = await getResumeDetail(resumeId);
 
@@ -814,8 +850,8 @@ async function createResumeAndAnalyze(resume) {
         message: "이력서 저장 및 AI 기업 추천 분석 완료",
         data: {
             resumeId,
-            insertCount: createResult.data.insertCount,
-            github: createResult.data.github,
+            insertCount: insertCount ?? { skipped: true },
+            github: githubResult ?? null,
             analysisStatus: "COMPLETED",
             analysis: analysisResult.data,
         },
@@ -1172,9 +1208,30 @@ async function getResumeRecommendations(resumeIdValue, stage = "RESUME") {
     }
 }
 
+/**
+ * 단일 공고에 대한 GPT 상세 분석 (온디맨드)
+ * 이력서 점수는 재계산하지 않고 PORTFOLIO_DIAGNOSIS + RECOMMENDATION_ACTION만 갱신한다.
+ */
+async function analyzeSingleJob({ resumeId, jobPostingId }) {
+    const parsedResumeId = parseResumeId(resumeId);
+    const parsedJobPostingId = parsePositiveInt(
+        jobPostingId,
+        "공고번호가 올바르지 않습니다."
+    );
+
+    const resumeDetailResult = await getResumeDetail(parsedResumeId);
+
+    return await resumeAnalyzeService.analyzeSingleJob({
+        resumeId:      parsedResumeId,
+        jobPostingId:  parsedJobPostingId,
+        resumeDetail:  resumeDetailResult.data,
+    });
+}
+
 module.exports = {
     createResumeAndAnalyze,
     analyzeSavedResume,
+    analyzeSingleJob,
     getResumeDetail,
     getResumeRecommendations,
 };
