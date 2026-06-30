@@ -79,7 +79,9 @@ async function startServer() {
         // 2. today_articles.json 초기화
         // await initializeContext();
 
-        await runPipeline(5);
+        runPipeline(5).catch(err =>
+            console.error("[Pipeline] 백그라운드 파이프라인 실패:", err)
+        );
 
         // 3. Scheduler 시작
         startScheduler();
