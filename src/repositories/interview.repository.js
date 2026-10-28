@@ -36,6 +36,90 @@ function readLobToString(lob) {
  * @param {object}   row    - oracledb OUT_FORMAT_OBJECT 한 행
  * @param {string[]} fields - LOB 일 수 있는 필드명 목록
  */
+/**
+ * 답변 직후 채점 결과(turnScore) 저장 — 질문별 판정·점수·피드백
+ */
+async function updateQaTurnScore(conn, interviewSessionId, interviewQaId, turnScore) {
+    const feedback = {
+        turnFeedback: turnScore.feedback || "",
+        missingCorePoints: turnScore.missingCorePoints || [],
+    };
+
+    await conn.execute(
+        `
+        UPDATE interview_qa
+           SET answer_status = :answerStatus,
+               qa_score = :qaScore,
+               qa_feedback = :qaFeedback
+         WHERE interview_session_id = :interviewSessionId
+           AND interview_qa_id = :interviewQaId
+        `,
+        {
+            answerStatus: turnScore.answerStatus || null,
+            qaScore: Number.isFinite(Number(turnScore.totalScore)) ? Number(turnScore.totalScore) : null,
+            qaFeedback: { val: JSON.stringify(feedback), type: require("oracledb").CLOB },
+            interviewSessionId,
+            interviewQaId,
+        },
+        { autoCommit: true }
+    );
+}
+
+/**
+ * 최종 리포트의 질문별 피드백 저장 (질문 순번 기준, 답변 직후 피드백과 병합)
+ */
+async function updateQaFinalFeedbacks(conn, interviewSessionId, questionFeedbacks) {
+    const oracledb = require("oracledb");
+
+    for (const item of questionFeedbacks) {
+        const questionOrder = Number(item.questionOrder);
+        if (!Number.isFinite(questionOrder)) continue;
+
+        const current = await conn.execute(
+            `SELECT qa_feedback AS "qaFeedback" FROM interview_qa WHERE interview_session_id = :sid AND question_order = :qo`,
+            { sid: interviewSessionId, qo: questionOrder },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        if (current.rows.length === 0) continue;
+
+        let previous = {};
+        try {
+            previous = JSON.parse(await readLobToString(current.rows[0].qaFeedback) || "{}");
+        } catch {
+            previous = {};
+        }
+
+        const merged = {
+            ...previous,
+            verdict: item.verdict || previous.verdict || null,
+            strengths: item.strengths || "",
+            problems: item.problems || "",
+            modelAnswer: item.modelAnswer || "",
+            keywords: Array.isArray(item.keywords) ? item.keywords : [],
+        };
+
+        await conn.execute(
+            `
+            UPDATE interview_qa
+               SET qa_feedback = :qaFeedback,
+                   answer_status = NVL(answer_status, :verdict),
+                   qa_score = NVL(:score, qa_score)
+             WHERE interview_session_id = :sid
+               AND question_order = :qo
+            `,
+            {
+                qaFeedback: { val: JSON.stringify(merged), type: oracledb.CLOB },
+                verdict: merged.verdict,
+                score: Number.isFinite(Number(item.score)) ? Number(item.score) : null,
+                sid: interviewSessionId,
+                qo: questionOrder,
+            },
+            { autoCommit: false }
+        );
+    }
+}
+
 async function resolveClobRow(row, fields) {
     if (!row) return row;
     const resolved = { ...row };
@@ -409,6 +493,7 @@ async function findSessionsByMemberId(conn, memberId) {
             s.session_status        AS "sessionStatus",
             s.total_question_count  AS "totalQuestionCount",
             s.total_answer_count    AS "totalAnswerCount",
+            s.is_sample             AS "isSample",
             jp.job_name             AS "jobName",
             c.company_name          AS "companyName",
             r.total_score           AS "totalScore",
@@ -453,6 +538,7 @@ async function findHistoryBySessionId(conn, interviewSessionId) {
             s.session_status        AS "sessionStatus",
             s.total_question_count  AS "totalQuestionCount",
             s.total_answer_count    AS "totalAnswerCount",
+            s.is_sample             AS "isSample",
             jp.job_name             AS "jobName",
             c.company_name          AS "companyName"
         FROM interview_session s
@@ -472,7 +558,10 @@ async function findHistoryBySessionId(conn, interviewSessionId) {
             answer_content          AS "answerContent",
             follow_up_yn            AS "followUpYn",
             question_created_at     AS "questionCreatedAt",
-            answered_at             AS "answeredAt"
+            answered_at             AS "answeredAt",
+            answer_status           AS "answerStatus",
+            qa_score                AS "qaScore",
+            qa_feedback             AS "qaFeedback"
         FROM interview_qa
         WHERE interview_session_id = :interviewSessionId
         ORDER BY question_order ASC
@@ -488,9 +577,16 @@ async function findHistoryBySessionId(conn, interviewSessionId) {
 
     // qa 의 question_content, answer_content 는 CLOB 이므로 스트림 전체 변환
     session.qaList = await Promise.all(
-        qaResult.rows.map((row) =>
-            resolveClobRow(row, ["questionContent", "answerContent"])
-        )
+        qaResult.rows.map(async (row) => {
+            const resolved = await resolveClobRow(row, ["questionContent", "answerContent", "qaFeedback"]);
+            // 질문별 피드백 JSON → 객체 (V005 이전 면접은 null)
+            try {
+                resolved.qaFeedback = resolved.qaFeedback ? JSON.parse(resolved.qaFeedback) : null;
+            } catch {
+                resolved.qaFeedback = null;
+            }
+            return resolved;
+        })
     );
     return session;
 }
@@ -539,6 +635,8 @@ module.exports = {
     findNextQuestionOrder,
     createQa,
     updateAnswer,
+    updateQaTurnScore,
+    updateQaFinalFeedbacks,
     incrementQuestionCount,
     incrementAnswerCount,
     findQaById,
