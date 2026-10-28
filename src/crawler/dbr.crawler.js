@@ -1,6 +1,5 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { chromium } = require("playwright");
 
 // [엄격한 규칙]
 // fs, path 모듈 사용 금지
@@ -95,122 +94,58 @@ async function crawlList(startNum = 1, endNum = 20) {
 
 /**
  * [Step 2] 기사 본문 수집 (Deep Crawling)
+ *
+ * 로그인 없이 공개되는 영역만 수집한다. (유료 본문은 로그인 세션이 필요해 수집하지 않음)
+ * - .article-free-zone : 비로그인 공개 요약 영역 (Article at a Glance 등)
+ * - 브라우저 없이 HTTP 요청만 사용 → 서버에 Chromium 설치 불필요
+ * 실패 시 빈 문자열을 반환하고, 걸러내기는 Filter 단계에 맡긴다.
  */
+const BODY_SELECTORS = [
+    ".article-free-zone",
+    ".cont-article",
+    ".articleBody",
+    "#article_content",
+    ".article_body",
+    ".view_con",
+];
+
 async function crawlArticle(url) {
-
-    let context;
-
     if (!url) return "";
 
-    console.log("=================================================");
-    console.log("URL :", url);
-
     try {
-
-        context = await chromium.launchPersistentContext(
-            "./browser/chrome-profile",
-            {
-                channel: "chrome",
-                headless: true
-            }
-        );
-        
-        const page = await context.newPage();
-
-        await page.goto(url, {
-            waitUntil: "networkidle",
-            timeout: REQUEST_TIMEOUT
+        const response = await axios.get(url, {
+            headers: DEFAULT_HEADERS,
+            timeout: REQUEST_TIMEOUT,
         });
 
-        const html = await page.content();
+        const $ = cheerio.load(response.data);
 
-        const isLogin = await page.locator("text=로그인").count();
+        for (const selector of BODY_SELECTORS) {
+            const target = $(selector).first();
 
-        if (isLogin > 0) {
-            throw new Error("DBR 로그인 세션이 만료되었습니다.");
-        }       
+            if (target.length === 0) continue;
 
-        const $ = cheerio.load(html);
+            target.find("script,style,iframe,form,button,noscript,svg").remove();
+            target.find("br").replaceWith("\n");
+            target.find("p").append("\n\n");
+            target.find("div,section,article").append("\n");
+            target.find("li").append("\n");
 
-        // ===============================
-        // 기존 selector 검사
-        // ===============================
+            const rawBody = target.text().trim();
 
-        let rawBody = "";
-
-        const selectors = [
-            ".article-free-zone",
-            ".cont-article",
-            ".articleBody",
-            "#article_content",
-            ".article_body",
-            ".article_txt",
-            ".view_con",
-            ".article_view",
-            "article",
-            "main"
-        ];
-
-        for (const selector of selectors) {
-
-            const target = $(selector);
-
-            console.log(
-                `Selector [${selector}] -> ${target.length}`
-            );
-
-            if (target.length > 0) {
-
-                target.find(
-                    "script,style,iframe,form,button,noscript,svg"
-                ).remove();
-
-                target.find("br").replaceWith("\n");
-
-                target.find("p").append("\n\n");
-
-                target.find("div,section,article").append("\n");
-
-                target.find("li").append("\n");
-
-                rawBody = target.text().trim();
-
-                console.log(
-                    "선택된 Selector :",
-                    selector
-                );
-
-                console.log(
-                    "본문 길이 :",
-                    rawBody.length
-                );
-
-                break;
+            if (rawBody) {
+                console.log(`[DBR] 본문 수집 (${selector}, ${rawBody.length}자): ${url}`);
+                return rawBody;
             }
         }
 
-        if (!rawBody) {
-
-            console.warn("본문 Selector를 찾지 못했습니다.");
-
-        }
-
-        return rawBody;
-
-    } catch (error) {
-
-        console.error(error);
-
+        console.warn(`[DBR] 공개 본문 영역을 찾지 못했습니다: ${url}`);
         return "";
 
-    } finally {
-
-        if (context) {
-            await context.close();
-        }
-
+    } catch (error) {
+        console.error(`[DBR_CRAWL_ERROR] 본문 수집 실패 - ${url}: ${error.message}`);
+        return "";
     }
-
 }
 
 module.exports = {

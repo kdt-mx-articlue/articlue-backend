@@ -1,4 +1,4 @@
-const { crawlDBRFrontPage } = require('../crawler/dbr.crawler');
+const storageUtil = require('../utils/articleStorage.util');
 const contextUtil = require('../utils/articleContext.util');
 
 const IT_KEYWORDS = [
@@ -41,19 +41,21 @@ function isItArticle(title, summary) {
 }
 
 /**
- * 오늘의 IT Context 데이터 갱신 파이프라인 (매일 00:00 호출)
+ * 오늘의 IT Context 데이터 갱신 (매일 기사 배치에서 article.pipeline 실행 후 호출)
+ * - 파이프라인 결과(storage/current/today_articles.json)를 화면용 today_articles.json 으로 변환
  */
 async function refreshTodayContext() {
     const today = getTodayString();
     
     try {
-        // 1. 최대 20개의 기사만 1차 수집
-        const rawArticles = await crawlDBRFrontPage();
+        // 1. 파이프라인이 수집·요약한 기사
+        const rawArticles = (await storageUtil.loadCurrent('today_articles.json')) || [];
         
-        // 2. IT 필터 적용
-        const filteredArticles = rawArticles.filter(article => 
+        // 2. IT 필터 적용 (걸러진 기사가 없으면 수집된 기사를 그대로 사용)
+        const itArticles = rawArticles.filter(article => 
             isItArticle(article.title, article.summary)
         );
+        const filteredArticles = itArticles.length > 0 ? itArticles : rawArticles;
 
         let finalContextData;
 
