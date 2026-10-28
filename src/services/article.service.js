@@ -33,6 +33,17 @@ function formatToISO(rawDate) {
 }
 
 /**
+ * 요약 값 → 줄바꿈으로 이은 문자열 (파이프라인 객체 / 문자열 모두 대응)
+ */
+function toSummaryText(summary) {
+    if (!summary) return '';
+    if (typeof summary === 'string') return summary;
+    if (Array.isArray(summary.text)) return summary.text.join('\n');
+    if (typeof summary.text === 'string') return summary.text;
+    return '';
+}
+
+/**
  * title + summary 기반 IT 기사 판별
  */
 function isItArticle(title, summary) {
@@ -49,7 +60,11 @@ async function refreshTodayContext() {
     
     try {
         // 1. 파이프라인이 수집·요약한 기사
-        const rawArticles = (await storageUtil.loadCurrent('today_articles.json')) || [];
+        //    파이프라인 summary 는 { text: [문장...], model, ... } 객체 → 화면은 문자열을 기대하므로 변환
+        const rawArticles = ((await storageUtil.loadCurrent('today_articles.json')) || []).map(article => ({
+            ...article,
+            summary: toSummaryText(article.summary) || article.preview || ''
+        }));
         
         // 2. IT 필터 적용 (걸러진 기사가 없으면 수집된 기사를 그대로 사용)
         const itArticles = rawArticles.filter(article => 
