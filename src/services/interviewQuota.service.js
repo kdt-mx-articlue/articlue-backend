@@ -35,7 +35,8 @@ async function findMemberUsage(conn, { memberId, resumeId }) {
                (SELECT COUNT(*)
                   FROM INTERVIEW_SESSION s
                   JOIN RESUME r ON r.RESUME_ID = s.RESUME_ID
-                 WHERE r.MEMBER_ID = m.MEMBER_ID) AS "usedCount"
+                 WHERE r.MEMBER_ID = m.MEMBER_ID
+                   AND s.IS_SAMPLE = 'N') AS "usedCount"
           FROM MEMBER m
          WHERE ${where}
         `,
@@ -102,6 +103,7 @@ async function assertCanStartInterview({ resumeId, chatMode }) {
 }
 
 module.exports = {
+    isDemoMember,
     getQuota,
     assertCanStartInterview,
 };

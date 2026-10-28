@@ -493,6 +493,7 @@ async function findSessionsByMemberId(conn, memberId) {
             s.session_status        AS "sessionStatus",
             s.total_question_count  AS "totalQuestionCount",
             s.total_answer_count    AS "totalAnswerCount",
+            s.is_sample             AS "isSample",
             jp.job_name             AS "jobName",
             c.company_name          AS "companyName",
             r.total_score           AS "totalScore",
@@ -537,6 +538,7 @@ async function findHistoryBySessionId(conn, interviewSessionId) {
             s.session_status        AS "sessionStatus",
             s.total_question_count  AS "totalQuestionCount",
             s.total_answer_count    AS "totalAnswerCount",
+            s.is_sample             AS "isSample",
             jp.job_name             AS "jobName",
             c.company_name          AS "companyName"
         FROM interview_session s

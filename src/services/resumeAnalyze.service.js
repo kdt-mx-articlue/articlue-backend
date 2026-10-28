@@ -1,6 +1,7 @@
 const { getConnection } = require("../config/db");
 const aiConfig = require("../config/ai.config");
 const analysisRepository = require("../repositories/resumeAnalysis.repository");
+const demoInterviewSampleService = require("./demoInterviewSample.service");
 const { createError } = require("../utils/error.util");
 
 /*
@@ -21,6 +22,18 @@ const RADAR_METRIC_TYPES = [
 
 // 1차 매칭은 전체 공고를 저장한다 (주간 수집으로 공고가 늘어남). 일괄 저장이라 건수가 늘어도 DB 왕복은 일정
 const MAX_RECOMMENDATION_LIMIT = 5000;
+
+function normalizeCareerCheck(value) {
+    if (!value || typeof value !== "object") return null;
+
+    const toNumberOrNull = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+
+    return {
+        mismatch: Boolean(value.mismatch),
+        requiredYears: toNumberOrNull(value.required_years ?? value.requiredYears),
+        resumeYears: toNumberOrNull(value.resume_years ?? value.resumeYears),
+    };
+}
 
 function isBlank(value) {
     return value === undefined || value === null || String(value).trim() === "";
@@ -382,6 +395,8 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
             metrics,
             diagnosis:   nestedAnalysisForDiag.diagnosis   ?? null,
             actionPlans: nestedAnalysisForDiag.action_plans ?? [],
+            // 경력 요건 판정 (요구 연차 > 보유 + 2년 → 미달, AI 가 점수도 감점함)
+            careerCheck: normalizeCareerCheck(nestedAnalysisForDiag.career_check),
         });
     }
 
@@ -508,6 +523,17 @@ async function analyzeAndSave({
 
         await conn.commit();
 
+        // 체험 계정: 매칭 상위 3개 기업에 샘플 면접 기록 (최초 1회, 실패해도 분석 결과에는 영향 없음)
+        if (normalizedAnalysisStage === "RESUME") {
+            await demoInterviewSampleService
+                .ensureDemoSamples({
+                    resumeId,
+                    desiredJob: resumeDetail.desiredJob,
+                    recommendations: savedResult.recommendations,
+                })
+                .catch((error) => console.error(`[DemoSample] 샘플 면접 생성 실패: ${error.message}`));
+        }
+
         return {
             success: true,
             message: "AI 기업 추천 분석 결과 저장 완료",
@@ -579,6 +605,7 @@ async function saveAiAnalysisResult({
             analysisStage: item.analysisStage,
             overallScore: item.overallScore,
             recommendRank: item.recommendRank,
+            careerCheck: item.careerCheck,
         })),
         conn
     );
