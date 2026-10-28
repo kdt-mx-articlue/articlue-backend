@@ -10,7 +10,7 @@ async function findAll(conn, filters = {}) {
         limit: size,
     };
 
-    let whereSql = "WHERE 1 = 1";
+    let whereSql = "WHERE NVL(jp.posting_status, 'ACTIVE') <> 'CLOSED'";
 
     if (filters.keyword) {
         whereSql += `
@@ -72,7 +72,7 @@ async function findAll(conn, filters = {}) {
 
 async function countAll(conn, filters = {}) {
     const binds = {};
-    let whereSql = "WHERE 1 = 1";
+    let whereSql = "WHERE NVL(jp.posting_status, 'ACTIVE') <> 'CLOSED'";
 
     if (filters.keyword) {
         whereSql += `
@@ -110,6 +110,8 @@ async function countAll(conn, filters = {}) {
 }
 
 async function findById(conn, jobPostingId) {
+    // CLOB 은 그대로 조회 (db.js fetchAsString 으로 문자열 변환)
+    //  - DBMS_LOB.SUBSTR(...,4000) 는 한글 장문(4000바이트 초과)에서 ORA-06502 발생
     const sql = `
         SELECT
             jp.job_posting_id AS "jobPostingId",
@@ -117,10 +119,10 @@ async function findById(conn, jobPostingId) {
             c.company_name AS "companyName",
             c.industry_category AS "industryCategory",
             c.company_size AS "companySize",
-            DBMS_LOB.SUBSTR(c.company_description, 4000, 1) AS "companyDescription",
+            c.company_description AS "companyDescription",
             c.homepage_url AS "homepageUrl",
             c.average_salary AS "averageSalary",
-            DBMS_LOB.SUBSTR(c.welfare_info, 4000, 1) AS "welfareInfo",
+            c.welfare_info AS "welfareInfo",
             c.work_location AS "companyWorkLocation",
 
             jp.posting_title AS "postingTitle",
@@ -128,10 +130,10 @@ async function findById(conn, jobPostingId) {
             jp.career_condition AS "careerCondition",
             jp.employment_type AS "employmentType",
             jp.work_location AS "workLocation",
-            DBMS_LOB.SUBSTR(jp.main_task, 4000, 1) AS "mainTask",
-            DBMS_LOB.SUBSTR(jp.qualification, 4000, 1) AS "qualification",
-            DBMS_LOB.SUBSTR(jp.preferred_qualification, 4000, 1) AS "preferredQualification",
-            DBMS_LOB.SUBSTR(jp.talent_profile, 4000, 1) AS "talentProfile",
+            jp.main_task AS "mainTask",
+            jp.qualification AS "qualification",
+            jp.preferred_qualification AS "preferredQualification",
+            jp.talent_profile AS "talentProfile",
             jp.original_url AS "originalUrl",
             jp.deadline_date AS "deadlineDate",
             jp.posting_status AS "postingStatus"
