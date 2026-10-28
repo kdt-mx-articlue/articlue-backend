@@ -1,4 +1,5 @@
 const interviewService = require("../services/interview.service");
+const interviewQuotaService = require("../services/interviewQuota.service");
 
 async function startInterview(req, res) {
     try {
@@ -54,6 +55,7 @@ function sendError(res, error, fallbackMessage) {
 
     return res.status(error.status || 500).json({
         success: false,
+        code: error.code,
         message: error.message || fallbackMessage,
     });
 }
@@ -99,7 +101,20 @@ async function getReport(req, res) {
     }
 }
 
+/**
+ * GET /api/interviews/quota?memberId= — 모의 면접 남은 횟수 / 음성 면접 가능 여부
+ */
+async function getQuota(req, res) {
+    try {
+        const data = await interviewQuotaService.getQuota(req.query);
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        return sendError(res, error, "면접 이용 한도 조회 실패");
+    }
+}
+
 module.exports = {
+    getQuota,
     getHistory,
     getReport,
     getSessions,

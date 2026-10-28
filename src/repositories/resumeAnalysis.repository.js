@@ -197,6 +197,16 @@ async function createRecommendationMetricDetail(data, conn) {
  * COMPANY_RECOMMENDATION + RECOMMENDATION_METRIC_DETAIL + JOB_POSTING + COMPANY 조인
  * 결과를 recommendationId 기준으로 그룹핑하여 반환
  */
+/** 경력 요건 판정 (V006 이전 분석 결과는 null) */
+function toCareerCheck(row) {
+    if (!row.careerMismatchYn) return null;
+    return {
+        mismatch: row.careerMismatchYn === "Y",
+        requiredYears: row.requiredCareerYears,
+        resumeYears: row.resumeCareerYears,
+    };
+}
+
 async function findRecommendationsByResume(conn, resumeId, analysisStage) {
     const sql = `
         SELECT
@@ -205,6 +215,9 @@ async function findRecommendationsByResume(conn, resumeId, analysisStage) {
             cr.ANALYSIS_STAGE       AS "analysisStage",
             cr.OVERALL_SCORE        AS "overallScore",
             cr.RECOMMEND_RANK       AS "recommendRank",
+            cr.CAREER_MISMATCH_YN   AS "careerMismatchYn",
+            cr.REQUIRED_CAREER_YEARS AS "requiredCareerYears",
+            cr.RESUME_CAREER_YEARS  AS "resumeCareerYears",
             c.company_name          AS "companyName",
             c.industry_category     AS "industryCategory",
             jp.job_name             AS "jobName",
@@ -240,6 +253,7 @@ async function findRecommendationsByResume(conn, resumeId, analysisStage) {
                 analysisStage:    row.analysisStage,
                 overallScore:     row.overallScore,
                 recommendRank:    row.recommendRank,
+                careerCheck:      toCareerCheck(row),
                 companyName:      row.companyName,
                 industryCategory: row.industryCategory,
                 jobName:          row.jobName,
@@ -274,6 +288,9 @@ async function findRecommendationByResumeAndJob(conn, resumeId, jobPostingId, an
             cr.ANALYSIS_STAGE       AS "analysisStage",
             cr.OVERALL_SCORE        AS "overallScore",
             cr.RECOMMEND_RANK       AS "recommendRank",
+            cr.CAREER_MISMATCH_YN   AS "careerMismatchYn",
+            cr.REQUIRED_CAREER_YEARS AS "requiredCareerYears",
+            cr.RESUME_CAREER_YEARS  AS "resumeCareerYears",
             rmd.METRIC_TYPE         AS "metricType",
             rmd.SCORE               AS "metricScore",
             rmd.REASON_TEXT         AS "reasonText"
@@ -300,6 +317,7 @@ async function findRecommendationByResumeAndJob(conn, resumeId, jobPostingId, an
         analysisStage:    first.analysisStage,
         overallScore:     first.overallScore,
         recommendRank:    first.recommendRank,
+        careerCheck:      toCareerCheck(first),
         metrics: {},
     };
     for (const row of result.rows) {
@@ -647,12 +665,14 @@ async function createCompanyRecommendations(rows, conn) {
         INSERT INTO COMPANY_RECOMMENDATION
         (
             RECOMMENDATION_ID, RESUME_ID, JOB_POSTING_ID, ANALYSIS_STAGE,
-            OVERALL_SCORE, LATEST_INTERVIEW_ID, RECOMMEND_RANK, RECOMMENDED_DATE
+            OVERALL_SCORE, LATEST_INTERVIEW_ID, RECOMMEND_RANK, RECOMMENDED_DATE,
+            CAREER_MISMATCH_YN, REQUIRED_CAREER_YEARS, RESUME_CAREER_YEARS
         )
         VALUES
         (
             :recommendationId, :resumeId, :jobPostingId, :analysisStage,
-            :overallScore, NULL, :recommendRank, SYSDATE
+            :overallScore, NULL, :recommendRank, SYSDATE,
+            :careerMismatchYn, :requiredCareerYears, :resumeCareerYears
         )
         `,
         rows.map((row) => ({
@@ -662,6 +682,9 @@ async function createCompanyRecommendations(rows, conn) {
             analysisStage: row.analysisStage,
             overallScore: row.overallScore,
             recommendRank: row.recommendRank || null,
+            careerMismatchYn: row.careerCheck?.mismatch ? "Y" : "N",
+            requiredCareerYears: row.careerCheck?.requiredYears ?? null,
+            resumeCareerYears: row.careerCheck?.resumeYears ?? null,
         })),
         {
             bindDefs: {
@@ -671,6 +694,9 @@ async function createCompanyRecommendations(rows, conn) {
                 analysisStage: { type: oracledb.STRING, maxSize: 20 },
                 overallScore: { type: oracledb.NUMBER },
                 recommendRank: { type: oracledb.NUMBER },
+                careerMismatchYn: { type: oracledb.STRING, maxSize: 1 },
+                requiredCareerYears: { type: oracledb.NUMBER },
+                resumeCareerYears: { type: oracledb.NUMBER },
             },
         }
     );

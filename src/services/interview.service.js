@@ -3,6 +3,7 @@ const db = require("../config/db");
 const interviewRepository = require("../repositories/interview.repository");
 const interviewContextRepository = require("../repositories/interviewContext.repository");
 const interviewChatbotAiService = require("./interviewChatbotAi.service");
+const interviewQuotaService = require("./interviewQuota.service");
 const elevenlabsService = require("./voice/elevenlabs.service");
 const openaiSpeechService = require("./voice/openaiSpeech.service");
 const resumeAnalysisRepository = require("../repositories/resumeAnalysis.repository");
@@ -21,6 +22,12 @@ async function startInterview(body) {
     validateStartBody(body);
 
     const config = buildStartConfig(body);
+
+    // 이용 한도·체험 계정 음성 제한 (세션 생성·LLM 호출 전에 차단)
+    await interviewQuotaService.assertCanStartInterview({
+        resumeId: config.resumeId,
+        chatMode: config.chatMode,
+    });
 
     const startData = await createInterviewSessionAndContext(config);
 
@@ -226,6 +233,7 @@ async function submitAnswer(params, body, file) {
 
     if (firstGraphResult.turnScore) {
         addTurnScore(interviewSessionId, firstGraphResult.turnScore);
+        await saveTurnScore(interviewSessionId, interviewQaId, firstGraphResult.turnScore);
     }
 
     const controlledGraphResult = await resolveGraphResultWithNodeGuard({
@@ -282,6 +290,22 @@ async function submitAnswer(params, body, file) {
             ? "REQUEST_FINISH"
             : "SHOW_QUESTION",
     };
+}
+
+/**
+ * 질문별 채점 결과를 DB 에 남긴다 (기존에는 메모리에만 있어 리포트에 쓰이지 못함)
+ * 저장 실패가 면접 진행을 막지 않도록 로그만 남긴다
+ */
+async function saveTurnScore(interviewSessionId, interviewQaId, turnScore) {
+    let conn;
+    try {
+        conn = await db.getConnection();
+        await interviewRepository.updateQaTurnScore(conn, interviewSessionId, interviewQaId, turnScore);
+    } catch (error) {
+        console.error(`[Interview] 질문별 채점 저장 실패 (qa=${interviewQaId}): ${error.message}`);
+    } finally {
+        if (conn) await conn.close();
+    }
 }
 
 async function resolveAnswerContent({ chatMode, body, file }) {
@@ -682,6 +706,15 @@ async function saveFinalReportAndComplete({ interviewSessionId, finalReport }) {
                     displayOrder: item.displayOrder,
                 });
             }
+        }
+
+        // 질문별 피드백 (판정·문제점·모범 답안 방향·키워드)
+        const questionFeedbacks = Array.isArray(finalReport.questionFeedbacks)
+            ? finalReport.questionFeedbacks
+            : [];
+
+        if (questionFeedbacks.length > 0) {
+            await interviewRepository.updateQaFinalFeedbacks(conn, interviewSessionId, questionFeedbacks);
         }
 
         await interviewRepository.completeSession(conn, interviewSessionId);
