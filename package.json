@@ -6,7 +6,11 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node ./src/app.js",
-    "dev": "nodemon ./src/app.js"
+    "dev": "nodemon ./src/app.js",
+    "migrate": "node ./scripts/migrate.js up",
+    "migrate:status": "node ./scripts/migrate.js status",
+    "migrate:baseline": "node ./scripts/migrate.js baseline",
+    "migrate:create": "node ./scripts/migrate.js create"
   },
   "keywords": [],
   "author": "",

@@ -48,3 +48,5 @@ browser/chrome-profile/
 # Playwright
 playwright-report/
 test-results/
+
+instantclient_11_2/

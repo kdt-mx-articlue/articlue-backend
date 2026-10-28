@@ -1,32 +1,21 @@
-# node:20-slim (Debian 기반 — Oracle Instant Client는 glibc 필요, Alpine 불가)
+# node:20-slim (Debian 기반)
 FROM node:20-slim
 
 WORKDIR /usr/src/app
 
-# Oracle Instant Client 의존성
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libaio1 \
-    wget \
-    unzip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Oracle Instant Client 21.12 Basic Lite (amd64)
-# Oracle 11g 서버에 thick mode로 연결
-RUN wget -q https://download.oracle.com/otn_software/linux/instantclient/2112000/instantclient-basiclite-linux.x64-21.12.0.0.0dbru.zip \
-      -O /tmp/ic.zip \
-    && unzip -q /tmp/ic.zip -d /opt/oracle \
-    && rm /tmp/ic.zip \
-    && echo /opt/oracle/instantclient_21_12 > /etc/ld.so.conf.d/oracle-instantclient.conf \
-    && ldconfig
-
-ENV ORACLE_CLIENT_LIB_DIR=/opt/oracle/instantclient_21_12
+# Oracle 연결은 node-oracledb Thin 모드를 사용합니다 (Oracle 12.1+ / XE 21c 대상).
+# Instant Client가 필요 없으므로 ORACLE_CLIENT_LIB_DIR 는 비워 둡니다.
+# Oracle 11g 등 Thick 모드가 꼭 필요하면 이미지 실행 시 Instant Client를 마운트하고
+# ORACLE_CLIENT_LIB_DIR 를 지정하세요.
 
 # 의존성 먼저 복사 (레이어 캐시 활용)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --omit=dev
 
 # 소스 복사
 COPY . .
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 

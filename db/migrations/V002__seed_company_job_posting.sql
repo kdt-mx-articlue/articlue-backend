@@ -3984,12 +3984,3 @@ INSERT INTO JOB_POSTING (JOB_POSTING_ID, COMPANY_ID, POSTING_TITLE, JOB_NAME, CA
 INSERT INTO JOB_POSTING (JOB_POSTING_ID, COMPANY_ID, POSTING_TITLE, JOB_NAME, CAREER_CONDITION, ORIGINAL_URL, DEADLINE_DATE, MAIN_TASK, QUALIFICATION, PREFERRED_QUALIFICATION, TALENT_PROFILE, POSTING_STATUS) VALUES (483, 276, '데이터 분석 (Data Analyst)', '데이터 분석 (Data Analyst)', '경력 5년 이상', 'https://team.tving.com/3422d1a8-9f4c-8094-b551-deb139bd7b4a', TO_DATE('2026-05-10', 'YYYY-MM-DD'), '광고 매출 및 KPI 분석·리포팅, 광고 인벤토리·타겟팅 효율 분석 및 최적화 전략 도출, 광고 성과 예측 및 이상 탐지, 광고 로그·시청 데이터 기반 통합 분석, 광고 데이터 파이프라인 설계·운영, 광고 상품·정책 개선 인사이트 제공', '광고 데이터 분석·데이터 엔지니어링 경력 5년 이상, SQL·Python 기반 대용량 데이터 분석 경험, 광고 KPI(Impression·CTR·CVR·eCPM·ARPU) 분석 경험, A/B 테스트 설계·분석 경험, 통계·머신러닝 기반 예측 모델링 또는 이상 탐지 경험, ETL 파이프라인 구축 및 운영 경험, BI 대시보드 구축 경험, 비즈니스 협업 경험', 'DSP·SSP·Ad Network·Ad Server 등 디지털 광고 데이터 분석 경험, 광고 수익 최적화(Yield Optimization) 경험, OTT·콘텐츠·미디어 플랫폼 데이터 분석 경험, 사용자 타겟팅·세그먼트 분석 경험, 광고 상품 설계·광고 정책 개선 경험', '비즈니스 임팩트 중심 문화, 데이터 기반 의사결정, 문제 정의부터 해결까지 End-to-End 오너십, AI·ML 기반 문제 해결 지향, 다양한 조직과 협업 중심, 빠르게 변화하는 광고·미디어 환경 대응', 'ACTIVE');
 INSERT INTO JOB_POSTING (JOB_POSTING_ID, COMPANY_ID, POSTING_TITLE, JOB_NAME, CAREER_CONDITION, ORIGINAL_URL, DEADLINE_DATE, MAIN_TASK, QUALIFICATION, PREFERRED_QUALIFICATION, TALENT_PROFILE, POSTING_STATUS) VALUES (484, 276, 'Media Engineer (미디어 엔지니어)', 'Media Engineer (미디어 엔지니어)', '경력 4년 이상 ~ 8년 이하', 'https://team.tving.com/3482d1a8-9f4c-8028-9bdd-f4ce0b46b8d3', TO_DATE('2026-05-10', 'YYYY-MM-DD'), '클라우드 기반 라이브 스트리밍 서비스 운영 및 장애 대응, 스트리밍 실시간 모니터링 및 이슈 분석, CDN 운영 및 트래픽 최적화, IaC 기반 설정 자동화', 'OTT 또는 방송 서비스 라이브 스트리밍 운영 경험, CDN 운영 경험, 장애 상황 원인 분석 및 대응 역량, 반복 운영 업무 자동화 역량, 데이터 기반 문제 분석 및 개선 역량', 'AWS·GCP·Azure 등 클라우드 미디어 서비스 운영 경험, 인코딩·패키징·스트리밍 워크플로우 경험, HLS·CMAF·MPEG-DASH 프로토콜 이해, 운영 자동화 도구 도입·개선 경험', '수백만 시청자 대상 고품질 라이브 스트리밍 운영 중심 문화, 빠른 장애 대응 및 협업, 자동화·데이터 기반 운영 지향', 'ACTIVE');
 COMMIT;
-
--- 시퀀스 업데이트
-ALTER SEQUENCE SEQ_COMPANY INCREMENT BY 276;
-SELECT SEQ_COMPANY.NEXTVAL FROM DUAL;
-ALTER SEQUENCE SEQ_COMPANY INCREMENT BY 1;
-
-ALTER SEQUENCE SEQ_JOB_POSTING INCREMENT BY 484;
-SELECT SEQ_JOB_POSTING.NEXTVAL FROM DUAL;
-ALTER SEQUENCE SEQ_JOB_POSTING INCREMENT BY 1;
