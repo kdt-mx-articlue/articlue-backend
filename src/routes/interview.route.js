@@ -22,6 +22,14 @@ router.get(
     interviewController.getSessions
 );
 
+/**
+ * 모의 면접 이용 한도 (남은 횟수, 체험 계정 음성 면접 불가)
+ */
+router.get(
+    "/quota",
+    interviewController.getQuota
+);
+
 router.post(
     "/sessions",
     interviewController.startInterview

@@ -3,6 +3,7 @@ const db = require("../config/db");
 const interviewRepository = require("../repositories/interview.repository");
 const interviewContextRepository = require("../repositories/interviewContext.repository");
 const interviewChatbotAiService = require("./interviewChatbotAi.service");
+const interviewQuotaService = require("./interviewQuota.service");
 const elevenlabsService = require("./voice/elevenlabs.service");
 const openaiSpeechService = require("./voice/openaiSpeech.service");
 const resumeAnalysisRepository = require("../repositories/resumeAnalysis.repository");
@@ -21,6 +22,12 @@ async function startInterview(body) {
     validateStartBody(body);
 
     const config = buildStartConfig(body);
+
+    // 이용 한도·체험 계정 음성 제한 (세션 생성·LLM 호출 전에 차단)
+    await interviewQuotaService.assertCanStartInterview({
+        resumeId: config.resumeId,
+        chatMode: config.chatMode,
+    });
 
     const startData = await createInterviewSessionAndContext(config);
 
