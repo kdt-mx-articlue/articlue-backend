@@ -594,7 +594,123 @@ async function updateMetricReasonText(recommendationId, metricType, reasonText, 
     });
 }
 
+/**
+ * 추천 결과 일괄 저장용 — JOB_POSTING 에 존재하는 공고 ID 만 반환 (FK 위반 사전 차단)
+ */
+async function findExistingJobPostingIds(jobPostingIds, conn) {
+    const ids = [...new Set(jobPostingIds.map(Number))];
+    const existing = new Set();
+
+    for (let i = 0; i < ids.length; i += 500) {
+        const chunk = ids.slice(i, i + 500);
+        const binds = {};
+        const placeholders = chunk.map((id, index) => {
+            binds[`id${index}`] = id;
+            return `:id${index}`;
+        });
+
+        const result = await conn.execute(
+            `SELECT JOB_POSTING_ID AS "jobPostingId" FROM JOB_POSTING WHERE JOB_POSTING_ID IN (${placeholders.join(", ")})`,
+            binds,
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        result.rows.forEach((row) => existing.add(row.jobPostingId));
+    }
+
+    return existing;
+}
+
+/**
+ * 추천 결과 일괄 저장 — 시퀀스 N개를 한 번에 발급
+ */
+async function allocateRecommendationIds(count, conn) {
+    if (count === 0) return [];
+
+    const result = await conn.execute(
+        `SELECT SEQ_COMPANY_RECOMMENDATION.NEXTVAL AS "id" FROM DUAL CONNECT BY LEVEL <= :count`,
+        { count },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows.map((row) => row.id);
+}
+
+/**
+ * 기업 추천 결과 일괄 생성 (executeMany 1회)
+ */
+async function createCompanyRecommendations(rows, conn) {
+    if (rows.length === 0) return;
+
+    await conn.executeMany(
+        `
+        INSERT INTO COMPANY_RECOMMENDATION
+        (
+            RECOMMENDATION_ID, RESUME_ID, JOB_POSTING_ID, ANALYSIS_STAGE,
+            OVERALL_SCORE, LATEST_INTERVIEW_ID, RECOMMEND_RANK, RECOMMENDED_DATE
+        )
+        VALUES
+        (
+            :recommendationId, :resumeId, :jobPostingId, :analysisStage,
+            :overallScore, NULL, :recommendRank, SYSDATE
+        )
+        `,
+        rows.map((row) => ({
+            recommendationId: row.recommendationId,
+            resumeId: row.resumeId,
+            jobPostingId: row.jobPostingId,
+            analysisStage: row.analysisStage,
+            overallScore: row.overallScore,
+            recommendRank: row.recommendRank || null,
+        })),
+        {
+            bindDefs: {
+                recommendationId: { type: oracledb.NUMBER },
+                resumeId: { type: oracledb.NUMBER },
+                jobPostingId: { type: oracledb.NUMBER },
+                analysisStage: { type: oracledb.STRING, maxSize: 20 },
+                overallScore: { type: oracledb.NUMBER },
+                recommendRank: { type: oracledb.NUMBER },
+            },
+        }
+    );
+}
+
+/**
+ * 기업 추천 지표 상세 일괄 생성 (executeMany 1회)
+ */
+async function createRecommendationMetricDetails(rows, conn) {
+    if (rows.length === 0) return;
+
+    await conn.executeMany(
+        `
+        INSERT INTO RECOMMENDATION_METRIC_DETAIL
+        (RECOMMENDATION_METRIC_ID, RECOMMENDATION_ID, METRIC_TYPE, SCORE, REASON_TEXT)
+        VALUES
+        (SEQ_RECOMMENDATION_METRIC.NEXTVAL, :recommendationId, :metricType, :score, :reasonText)
+        `,
+        rows.map((row) => ({
+            recommendationId: row.recommendationId,
+            metricType: row.metricType,
+            score: row.score,
+            reasonText: row.reasonText,
+        })),
+        {
+            bindDefs: {
+                recommendationId: { type: oracledb.NUMBER },
+                metricType: { type: oracledb.STRING, maxSize: 50 },
+                score: { type: oracledb.NUMBER },
+                reasonText: { type: oracledb.CLOB },
+            },
+        }
+    );
+}
+
 module.exports = {
+    findExistingJobPostingIds,
+    allocateRecommendationIds,
+    createCompanyRecommendations,
+    createRecommendationMetricDetails,
     deleteRecommendationResultsByResumeStage,
     deleteRecommendationByResumeJobStage,
     createCompanyRecommendation,
