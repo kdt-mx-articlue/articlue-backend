@@ -1,4 +1,4 @@
-const { crawlDBRFrontPage } = require('../crawler/dbr.crawler');
+const storageUtil = require('../utils/articleStorage.util');
 const contextUtil = require('../utils/articleContext.util');
 
 const IT_KEYWORDS = [
@@ -33,6 +33,17 @@ function formatToISO(rawDate) {
 }
 
 /**
+ * 요약 값 → 줄바꿈으로 이은 문자열 (파이프라인 객체 / 문자열 모두 대응)
+ */
+function toSummaryText(summary) {
+    if (!summary) return '';
+    if (typeof summary === 'string') return summary;
+    if (Array.isArray(summary.text)) return summary.text.join('\n');
+    if (typeof summary.text === 'string') return summary.text;
+    return '';
+}
+
+/**
  * title + summary 기반 IT 기사 판별
  */
 function isItArticle(title, summary) {
@@ -41,19 +52,25 @@ function isItArticle(title, summary) {
 }
 
 /**
- * 오늘의 IT Context 데이터 갱신 파이프라인 (매일 00:00 호출)
+ * 오늘의 IT Context 데이터 갱신 (매일 기사 배치에서 article.pipeline 실행 후 호출)
+ * - 파이프라인 결과(storage/current/today_articles.json)를 화면용 today_articles.json 으로 변환
  */
 async function refreshTodayContext() {
     const today = getTodayString();
     
     try {
-        // 1. 최대 20개의 기사만 1차 수집
-        const rawArticles = await crawlDBRFrontPage();
+        // 1. 파이프라인이 수집·요약한 기사
+        //    파이프라인 summary 는 { text: [문장...], model, ... } 객체 → 화면은 문자열을 기대하므로 변환
+        const rawArticles = ((await storageUtil.loadCurrent('today_articles.json')) || []).map(article => ({
+            ...article,
+            summary: toSummaryText(article.summary) || article.preview || ''
+        }));
         
-        // 2. IT 필터 적용
-        const filteredArticles = rawArticles.filter(article => 
+        // 2. IT 필터 적용 (걸러진 기사가 없으면 수집된 기사를 그대로 사용)
+        const itArticles = rawArticles.filter(article => 
             isItArticle(article.title, article.summary)
         );
+        const filteredArticles = itArticles.length > 0 ? itArticles : rawArticles;
 
         let finalContextData;
 

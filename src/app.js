@@ -9,9 +9,8 @@ const env = require("./config/env.js");
 const { initOraclePool, closeOraclePool } = require("./config/db");
 const corsMiddleware = require("./config/cors");
 
-// DBR 기사 크롤링
-// const { initializeContext } = require("./services/article.service");
-const { startScheduler, stopScheduler } = require("./scheduler/article.scheduler");
+// 배치 스케줄러 (DBR 아티클 매일 / 채용공고 매주) — 배치는 자식 프로세스로 실행
+const { startScheduler, stopScheduler } = require("./scheduler/batch.scheduler");
 const articleRoutes = require("./routes/article.route");
 
 // 라우팅포인트 load
@@ -22,9 +21,9 @@ const resumeRoutes = require("./routes/resume.route.js")
 const githubRoutes = require("./routes/github.route.js");
 const interviewRoutes = require("./routes/interview.route.js");
 const jobPostingRotes = require("./routes/jobPosting.route.js");
-const { runPipeline } = require("./pipeline/article.pipeline");
 const pipelineRouter = require("./routes/pipeline.route");
 const coverLetterRoutes = require("./routes/coverLetter.route.js");
+const adminRoutes = require("./routes/admin.route.js");
 
 const app = express();
 
@@ -50,6 +49,7 @@ app.use("/api/interviews", interviewRoutes);
 app.use("/api/job-postings", jobPostingRotes);
 app.use("/api/cover-letters", coverLetterRoutes);
 app.use("/api/test", testRoutes);
+app.use("/api/admin", adminRoutes);
 
 // ⚠️ 임시 디버그
 app.get("/api/debug/jp-count", async (req, res) => {
@@ -76,15 +76,9 @@ async function startServer() {
         // 1. Oracle Pool 생성
         await initOraclePool();
 
-        // 2. today_articles.json 초기화
-        // await initializeContext();
-
-        runPipeline(5).catch(err =>
-            console.error("[Pipeline] 백그라운드 파이프라인 실패:", err)
-        );
-
-        // 3. Scheduler 시작
-        startScheduler();
+        // 2. 배치 스케줄러 시작 (실패해도 API 서버는 계속 기동)
+        //    DBR 아티클은 기동마다 돌리지 않고, 마지막 완료 후 하루가 지났을 때만 보충 실행
+        await startScheduler();
 
         // 4. 서버 시작
         const server = app.listen(env.port, () => {

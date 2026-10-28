@@ -554,45 +554,49 @@ async function saveAiAnalysisResult({
     );
 
     const savedRecommendations = [];
-    let savedMetricCount = 0;
 
-    for (const analysisItem of analysisItems) {
-        let recommendationId;
-        try {
-            recommendationId =
-                await analysisRepository.createCompanyRecommendation(
-                    {
-                        resumeId,
-                        jobPostingId: analysisItem.jobPostingId,
-                        analysisStage: analysisItem.analysisStage,
-                        overallScore: analysisItem.overallScore,
-                        latestInterviewId: null,
-                        recommendRank: analysisItem.recommendRank,
-                    },
-                    conn
-                );
-        } catch (err) {
-            // Oracle FK 위반: JOB_POSTING 테이블에 해당 공고가 없으면 skip
-            if (err.errorNum === 2291 || (err.message && err.message.includes("ORA-02291"))) {
-                console.warn(`[ANALYSIS] job_posting_id=${analysisItem.jobPostingId} 가 JOB_POSTING 테이블에 없어 추천 저장 스킵`);
-                continue;
-            }
-            throw err;
-        }
+    // 추천·지표는 건별 INSERT 대신 일괄 저장 (공고 수 × 지표 수 만큼의 DB 왕복 → 수 회)
+    // JOB_POSTING 에 없는 공고는 FK 위반 전에 미리 제외
+    const existingJobIds = await analysisRepository.findExistingJobPostingIds(
+        analysisItems.map((item) => item.jobPostingId),
+        conn
+    );
 
-        for (const metric of analysisItem.metrics) {
-            await analysisRepository.createRecommendationMetricDetail(
-                {
-                    recommendationId,
-                    metricType: metric.metricType,
-                    score: metric.score,
-                    reasonText: metric.reasonText,
-                },
-                conn
-            );
+    const savableItems = analysisItems.filter((item) => {
+        if (existingJobIds.has(Number(item.jobPostingId))) return true;
+        console.warn(`[ANALYSIS] job_posting_id=${item.jobPostingId} 가 JOB_POSTING 테이블에 없어 추천 저장 스킵`);
+        return false;
+    });
 
-            savedMetricCount++;
-        }
+    const recommendationIds = await analysisRepository.allocateRecommendationIds(savableItems.length, conn);
+
+    await analysisRepository.createCompanyRecommendations(
+        savableItems.map((item, index) => ({
+            recommendationId: recommendationIds[index],
+            resumeId,
+            jobPostingId: item.jobPostingId,
+            analysisStage: item.analysisStage,
+            overallScore: item.overallScore,
+            recommendRank: item.recommendRank,
+        })),
+        conn
+    );
+
+    const metricRows = savableItems.flatMap((item, index) =>
+        item.metrics.map((metric) => ({
+            recommendationId: recommendationIds[index],
+            metricType: metric.metricType,
+            score: metric.score,
+            reasonText: metric.reasonText,
+        }))
+    );
+
+    await analysisRepository.createRecommendationMetricDetails(metricRows, conn);
+
+    const savedMetricCount = metricRows.length;
+
+    for (const [index, analysisItem] of savableItems.entries()) {
+        const recommendationId = recommendationIds[index];
 
         // portfolio_diagnosis 저장 (weakness 진단)
         const diag = analysisItem.diagnosis;
