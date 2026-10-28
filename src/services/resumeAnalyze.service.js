@@ -19,7 +19,8 @@ const RADAR_METRIC_TYPES = [
     "culture_fit",
 ];
 
-const MAX_RECOMMENDATION_LIMIT = 500;
+// 1차 매칭은 전체 공고를 저장한다 (주간 수집으로 공고가 늘어남). 일괄 저장이라 건수가 늘어도 DB 왕복은 일정
+const MAX_RECOMMENDATION_LIMIT = 5000;
 
 function isBlank(value) {
     return value === undefined || value === null || String(value).trim() === "";
@@ -262,7 +263,7 @@ function normalizeAnalysisItems(aiRoot, analysisStage, recommendationLimit) {
     }
 
     if (jobMatches.length > MAX_RECOMMENDATION_LIMIT) {
-        throw createError("AI 추천 결과는 최대 500개까지만 저장할 수 있습니다.", 502);
+        throw createError(`AI 추천 결과는 최대 ${MAX_RECOMMENDATION_LIMIT}개까지만 저장할 수 있습니다.`, 502);
     }
 
     const jobPostingIdSet = new Set();
