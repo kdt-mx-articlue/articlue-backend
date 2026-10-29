@@ -2,6 +2,7 @@ require("dotenv").config();
 
 // 1. 프레임워크 load
 const express = require("express");
+const cookieParser = require("cookie-parser");
 const swaggerUi = require("swagger-ui-express");
 
 // 2. 환경설정 load
@@ -12,9 +13,9 @@ const corsMiddleware = require("./config/cors");
 // 배치 스케줄러 (DBR 아티클 매일 / 채용공고 매주) — 배치는 자식 프로세스로 실행
 const { startScheduler, stopScheduler } = require("./scheduler/batch.scheduler");
 const articleRoutes = require("./routes/article.route");
+const { hashLegacyPasswords } = require("./services/auth.service");
 
 // 라우팅포인트 load
-const testRoutes = require("./routes/test.route.js");
 const authRoutes = require("./routes/auth.route.js");
 const memberRoutes = require("./routes/member.route.js");
 const resumeRoutes = require("./routes/resume.route.js")
@@ -28,6 +29,9 @@ const adminRoutes = require("./routes/admin.route.js");
 const app = express();
 
 app.use(corsMiddleware);
+
+// 로그인 세션 쿠키 (middlewares/auth.middleware)
+app.use(cookieParser());
 
 // JSON Body Parser
 app.use(express.json());
@@ -48,26 +52,7 @@ app.use("/api/github", githubRoutes);
 app.use("/api/interviews", interviewRoutes);
 app.use("/api/job-postings", jobPostingRotes);
 app.use("/api/cover-letters", coverLetterRoutes);
-app.use("/api/test", testRoutes);
 app.use("/api/admin", adminRoutes);
-
-// ⚠️ 임시 디버그
-app.get("/api/debug/jp-count", async (req, res) => {
-    const { getConnection } = require("./config/db");
-    const oracledb = require("oracledb");
-    let conn;
-    try {
-        conn = await getConnection();
-        const r1 = await conn.execute("SELECT COUNT(*) AS CNT FROM JOB_POSTING", {}, { outFormat: oracledb.OUT_FORMAT_OBJECT });
-        const r2 = await conn.execute("SELECT COUNT(*) AS CNT FROM COMPANY", {}, { outFormat: oracledb.OUT_FORMAT_OBJECT });
-        const r3 = await conn.execute(
-            "SELECT jp.job_posting_id, c.company_name, jp.job_name FROM job_posting jp JOIN company c ON jp.company_id = c.company_id WHERE ROWNUM <= 3",
-            {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-        res.json({ jobPostingCount: r1.rows[0].CNT, companyCount: r2.rows[0].CNT, sample: r3.rows });
-    } catch(e) { res.status(500).json({ error: e.message }); }
-    finally { if (conn) await conn.close(); }
-});
 
 
 // 서버 실행
@@ -75,6 +60,9 @@ async function startServer() {
     try {
         // 1. Oracle Pool 생성
         await initOraclePool();
+
+        // 1-1. 평문으로 남아 있는 기존 비밀번호를 해시로 변환 (DB 만 사용, 실패해도 기동은 계속)
+        await hashLegacyPasswords();
 
         // 2. 배치 스케줄러 시작 (실패해도 API 서버는 계속 기동)
         //    DBR 아티클은 기동마다 돌리지 않고, 마지막 완료 후 하루가 지났을 때만 보충 실행

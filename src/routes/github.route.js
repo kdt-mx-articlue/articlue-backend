@@ -2,6 +2,7 @@ const express = require("express");
 const githubController = require("../controllers/github.controller");
 const { getSocialSession } = require("../store/socialSessionStore");
 const { SOCIAL_PROVIDER } = require("../config/socialApi.config");
+const { requireAuth } = require("../middlewares/auth.middleware");
 
 const router = express.Router();
 
@@ -61,6 +62,6 @@ router.post("/auth/token", githubController.issueToken);
  *
  * GitHub 데이터를 실제 Oracle DB에 저장한다.
  */
-router.post("/storage", requireGithubSession, githubController.storage);
+router.post("/storage", requireAuth, requireGithubSession, githubController.storage);
 
 module.exports = router;

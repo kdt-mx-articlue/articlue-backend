@@ -8,12 +8,10 @@ function sendError(res, error, fallback) {
     });
 }
 
+// memberId 는 모두 로그인 세션(req.memberId) 기준 — member.route 의 requireAuth
 async function getProfile(req, res) {
     try {
-        const memberId = req.query.memberId;
-        if (!memberId) {
-            return res.status(400).json({ success: false, message: "memberId가 필요합니다." });
-        }
+        const memberId = req.memberId;
         const result = await memberService.getProfile(memberId);
         return res.status(200).json(result);
     } catch (error) {
@@ -23,10 +21,7 @@ async function getProfile(req, res) {
 
 async function updateProfile(req, res) {
     try {
-        const memberId = req.query.memberId || req.body.memberId;
-        if (!memberId) {
-            return res.status(400).json({ success: false, message: "memberId가 필요합니다." });
-        }
+        const memberId = req.memberId;
         const result = await memberService.updateProfile(memberId, req.body);
         return res.status(200).json(result);
     } catch (error) {
@@ -36,10 +31,7 @@ async function updateProfile(req, res) {
 
 async function getMe(req, res) {
     try {
-        const memberId = req.query.memberId;
-        if (!memberId) {
-            return res.status(400).json({ success: false, message: "memberId가 필요합니다." });
-        }
+        const memberId = req.memberId;
         const result = await memberService.getMe(memberId);
         return res.status(200).json(result);
     } catch (error) {
