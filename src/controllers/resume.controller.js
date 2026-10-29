@@ -5,12 +5,15 @@ const resumeAnalysisRepository = require('../repositories/resumeAnalysis.reposit
 // 이력서 생성
 async function createResume(req, res) {
     try {
+        // 회원은 화면이 보낸 값이 아니라 로그인 세션 기준
+        const body = { ...req.body, memberId: req.memberId, member_id: req.memberId };
+
         console.log("[RESUME CTRL] 요청 시작");
-        console.log("[RESUME CTRL] body.memberId:", req.body.memberId || req.body.member_id);
-        console.log("[RESUME CTRL] body.resumeTitle:", req.body.resumeTitle || req.body.resume_title);
+        console.log("[RESUME CTRL] memberId:", req.memberId);
+        console.log("[RESUME CTRL] body.resumeTitle:", body.resumeTitle || body.resume_title);
         console.time("[RESUME CTRL] total");
 
-        const result = await resumeService.createResumeAndAnalyze(req.body);
+        const result = await resumeService.createResumeAndAnalyze(body);
 
         console.timeEnd("[RESUME CTRL] total");
         console.log("[RESUME CTRL] 최종 응답 message:", result.message);

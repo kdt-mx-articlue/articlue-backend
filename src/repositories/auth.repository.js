@@ -13,6 +13,7 @@ async function signup(member, conn) {
             EMAIL,
             NICKNAME,
             USER_TYPE,
+            SIGNUP_IP_HASH,
             CREATE_AT,
             UPDATE_AT
         )
@@ -23,6 +24,7 @@ async function signup(member, conn) {
             :email,
             :nickname,
             'COMMON',
+            :signupIpHash,
             SYSDATE,
             SYSDATE
         )
@@ -35,6 +37,7 @@ async function signup(member, conn) {
             password: member.password,
             email: member.email,
             nickname: member.nickname,
+            signupIpHash: member.signupIpHash || null,
 
             memberId: {
                 dir: oracledb.BIND_OUT,
@@ -100,6 +103,36 @@ async function login(loginId, conn) {
     const result = await conn.execute(sql, { loginId });
 
     return result.rows[0];
+}
+
+/**
+ * 비밀번호 해시 교체
+ */
+async function updatePassword(memberId, passwordHash, conn) {
+
+    await conn.execute(
+        `UPDATE MEMBER SET PASSWORD = :passwordHash WHERE MEMBER_ID = :memberId`,
+        { passwordHash, memberId }
+    );
+}
+
+/**
+ * 해시되지 않은(평문) 비밀번호를 가진 회원
+ */
+async function findLegacyPasswords(conn) {
+
+    const sql = `
+        SELECT
+            MEMBER_ID AS "memberId",
+            PASSWORD AS "password"
+        FROM MEMBER
+        WHERE PASSWORD IS NOT NULL
+          AND PASSWORD NOT LIKE '$2_$%'
+    `;
+
+    const result = await conn.execute(sql);
+
+    return result.rows;
 }
 
 /**
@@ -176,6 +209,8 @@ module.exports = {
     findByLoginId,
     findByEmail,
     login,
+    updatePassword,
+    findLegacyPasswords,
     // 소셜 로그인
     signupSocial,
     findById

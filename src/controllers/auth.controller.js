@@ -1,4 +1,6 @@
 const authService = require("../services/auth.service");
+const { getClientIp } = require("../services/signupLimit.service");
+const { issueSession, clearSession } = require("../middlewares/auth.middleware");
 
 /**
  * 회원가입
@@ -6,7 +8,7 @@ const authService = require("../services/auth.service");
 async function signup(req, res) {
 
     try {
-        const result = await authService.signup(req.body);
+        const result = await authService.signup(req.body, { clientIp: getClientIp(req) });
 
         return res.status(201).json({
             success: true,
@@ -39,6 +41,8 @@ async function login(req, res) {
         }
 
         const result = await authService.login(member);
+
+        issueSession(res, result.memberId);
 
         return res.status(200).json({
             success: true,
@@ -73,6 +77,8 @@ async function kakaoLogin(req, res) {
                 req.body.code
             );
 
+        issueSession(res, result.memberId);
+
         return res.status(200).json({
             success: true,
             message: "카카오 로그인 성공",
@@ -104,6 +110,8 @@ async function naverLogin(req, res, next) {
                 req.query.state
             );
 
+        issueSession(res, result.memberId);
+
         res.json(result);
 
     } catch (error) {
@@ -111,4 +119,10 @@ async function naverLogin(req, res, next) {
     }
 }
 
-module.exports = { signup, login, kakaoLogin, naverLogin };
+// 로그아웃 — 세션 쿠키 삭제 (로그인 상태가 아니어도 성공)
+function logout(req, res) {
+    clearSession(res);
+    return res.status(200).json({ success: true, message: "로그아웃 되었습니다." });
+}
+
+module.exports = { signup, login, logout, kakaoLogin, naverLogin };
