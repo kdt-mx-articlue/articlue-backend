@@ -106,6 +106,36 @@ async function login(loginId, conn) {
 }
 
 /**
+ * 비밀번호 해시 교체
+ */
+async function updatePassword(memberId, passwordHash, conn) {
+
+    await conn.execute(
+        `UPDATE MEMBER SET PASSWORD = :passwordHash WHERE MEMBER_ID = :memberId`,
+        { passwordHash, memberId }
+    );
+}
+
+/**
+ * 해시되지 않은(평문) 비밀번호를 가진 회원
+ */
+async function findLegacyPasswords(conn) {
+
+    const sql = `
+        SELECT
+            MEMBER_ID AS "memberId",
+            PASSWORD AS "password"
+        FROM MEMBER
+        WHERE PASSWORD IS NOT NULL
+          AND PASSWORD NOT LIKE '$2_$%'
+    `;
+
+    const result = await conn.execute(sql);
+
+    return result.rows;
+}
+
+/**
  * 소셜 로그인 회원 생성
  */
 async function signupSocial(member, conn) {
@@ -179,6 +209,8 @@ module.exports = {
     findByLoginId,
     findByEmail,
     login,
+    updatePassword,
+    findLegacyPasswords,
     // 소셜 로그인
     signupSocial,
     findById

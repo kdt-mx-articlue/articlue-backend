@@ -4,6 +4,7 @@ const signupLimitService = require("./signupLimit.service");
 
 const { getConnection } = require("../config/db");
 const { createError } = require("../utils/error.util");
+const { hashPassword, verifyPassword } = require("../utils/password.util");
 
 const axios = require("axios");
 const env = require("../config/env");
@@ -60,8 +61,9 @@ async function signup(member, { clientIp } = {}) {
         const signupIpHash = signupLimitService.hashIp(clientIp);
         await signupLimitService.assertCanSignup({ member, ipHash: signupIpHash }, conn);
 
-        // 5. 회원 저장
-        const memberId = await authRepository.signup({ ...member, signupIpHash }, conn);
+        // 5. 회원 저장 (비밀번호는 bcrypt 해시만 저장)
+        const passwordHash = await hashPassword(member.password);
+        const memberId = await authRepository.signup({ ...member, password: passwordHash, signupIpHash }, conn);
         // 5-1. 회원 프로필 저장
         await memberProfileRepository.create( memberId, member, conn );
 
@@ -117,7 +119,14 @@ async function login(member) {
         if (!loginMember) { throw createError("아이디 또는 비밀번호가 올바르지 않습니다.", 400); }
 
         // 비밀번호 비교
-        if (loginMember.password !== member.password) { throw createError("아이디 또는 비밀번호가 올바르지 않습니다.", 400); }
+        const { ok, needsRehash } = await verifyPassword(member.password, loginMember.password);
+        if (!ok) { throw createError("아이디 또는 비밀번호가 올바르지 않습니다.", 400); }
+
+        // 평문으로 저장돼 있던 비밀번호는 로그인 시 해시로 교체
+        if (needsRehash) {
+            await authRepository.updatePassword(loginMember.memberId, await hashPassword(member.password), conn);
+            await conn.commit();
+        }
 
         return {
             memberId:
@@ -457,4 +466,35 @@ async function naverLogin(code, state) {
     }
 }
 
-module.exports = { signup, login, kakaoLogin, naverLogin };
+/**
+ * 평문으로 저장된 기존 비밀번호를 bcrypt 해시로 일괄 변환 (기동 시 1회, 변환할 것이 없으면 조회 1번)
+ */
+async function hashLegacyPasswords() {
+
+    let conn;
+
+    try {
+        conn = await getConnection();
+
+        const members = await authRepository.findLegacyPasswords(conn);
+
+        for (const m of members) {
+            await authRepository.updatePassword(m.memberId, await hashPassword(m.password), conn);
+        }
+
+        await conn.commit();
+
+        if (members.length > 0) {
+            console.log(`[Auth] 평문 비밀번호 ${members.length}건을 해시로 변환했습니다.`);
+        }
+
+    } catch (error) {
+        if (conn) await conn.rollback();
+        console.error(`[Auth] 평문 비밀번호 변환 실패: ${error.message}`);
+
+    } finally {
+        if (conn) await conn.close();
+    }
+}
+
+module.exports = { signup, login, kakaoLogin, naverLogin, hashLegacyPasswords };
