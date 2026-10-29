@@ -1,19 +1,6 @@
 const githubService = require("../services/github.service");
 
 /**
- * memberId 추출
- * - body/query 둘 다 지원
- */
-function getMemberId(req) {
-    return (
-        req.body?.memberId ||
-        req.body?.member_id ||
-        req.query?.memberId ||
-        req.query?.member_id
-    );
-}
-
-/**
  * 공통 에러 응답
  */
 function sendError(res, error, defaultMessage) {
@@ -144,7 +131,8 @@ async function issueToken(req, res) {
  */
 async function storage(req, res) {
     try {
-        const memberId = getMemberId(req);
+        // 로그인 세션 기준 (github.route 의 requireAuth)
+        const memberId = req.memberId;
 
         const result = await githubService.storage({
             githubSession: req.githubSession,

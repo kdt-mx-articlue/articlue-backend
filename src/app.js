@@ -2,6 +2,7 @@ require("dotenv").config();
 
 // 1. 프레임워크 load
 const express = require("express");
+const cookieParser = require("cookie-parser");
 const swaggerUi = require("swagger-ui-express");
 
 // 2. 환경설정 load
@@ -28,6 +29,9 @@ const adminRoutes = require("./routes/admin.route.js");
 const app = express();
 
 app.use(corsMiddleware);
+
+// 로그인 세션 쿠키 (middlewares/auth.middleware)
+app.use(cookieParser());
 
 // JSON Body Parser
 app.use(express.json());

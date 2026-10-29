@@ -6,7 +6,8 @@ const coverLetterRepo = require("../repositories/coverLetter.repository");
 
 async function generate(req, res) {
     try {
-        const { memberId, resumeId, jobPostingId, companyName, jobTitle, jobDescription, questions } = req.body;
+        const { resumeId, jobPostingId, companyName, jobTitle, jobDescription, questions } = req.body;
+        const memberId = req.memberId;
         if (!resumeId || !jobPostingId || !companyName || !jobTitle) {
             return res.status(400).json({ success: false, message: "필수 파라미터 누락" });
         }
@@ -21,8 +22,7 @@ async function generate(req, res) {
 }
 
 async function list(req, res) {
-    const { memberId } = req.query;
-    if (!memberId) return res.status(400).json({ success: false, message: "memberId 필요" });
+    const memberId = req.memberId;
     const conn = await getConnection();
     try {
         const items = await coverLetterRepo.findCoverLettersByMember(memberId, conn);

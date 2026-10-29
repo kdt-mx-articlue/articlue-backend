@@ -2,8 +2,13 @@ const express = require("express");
 const multer = require("multer");
 
 const interviewController = require("../controllers/interview.controller");
+const { requireAuth, ownsResume, ownsInterviewSession } = require("../middlewares/auth.middleware");
 
 const router = express.Router();
+
+// 모두 로그인 필요, 이력서·면접 세션은 본인 것만
+router.use(requireAuth);
+const ownSession = ownsInterviewSession((req) => req.params.interviewSessionId);
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -32,6 +37,7 @@ router.get(
 
 router.post(
     "/sessions",
+    ownsResume((req) => req.body?.resumeId),
     interviewController.startInterview
 );
 
@@ -53,6 +59,7 @@ router.post(
  */
 router.post(
     "/sessions/:interviewSessionId/questions/:interviewQaId/answer",
+    ownSession,
     upload.single("audioFile"),
     interviewController.submitAnswer
 );
@@ -62,17 +69,20 @@ router.post(
  */
 router.post(
     "/sessions/:interviewSessionId/finish",
+    ownSession,
     interviewController.finishInterview
 );
 
 
 router.get(
     "/sessions/:interviewSessionId/history",
+    ownSession,
     interviewController.getHistory
 );
 
 router.get(
     "/sessions/:interviewSessionId/report",
+    ownSession,
     interviewController.getReport
 );
 

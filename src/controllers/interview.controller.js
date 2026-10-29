@@ -63,11 +63,7 @@ function sendError(res, error, fallbackMessage) {
 
 async function getSessions(req, res) {
     try {
-        const memberId = req.query.memberId;
-        if (!memberId) {
-            return res.status(400).json({ success: false, message: "memberId가 필요합니다." });
-        }
-        const result = await interviewService.getSessionsByMemberId(memberId);
+        const result = await interviewService.getSessionsByMemberId(req.memberId);
         return res.status(200).json(result);
     } catch (error) {
         console.error(error);
@@ -102,11 +98,11 @@ async function getReport(req, res) {
 }
 
 /**
- * GET /api/interviews/quota?memberId= — 모의 면접 남은 횟수 / 음성 면접 가능 여부
+ * GET /api/interviews/quota — 로그인한 회원의 모의 면접 남은 횟수 / 음성 면접 가능 여부
  */
 async function getQuota(req, res) {
     try {
-        const data = await interviewQuotaService.getQuota(req.query);
+        const data = await interviewQuotaService.getQuota({ memberId: req.memberId });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         return sendError(res, error, "면접 이용 한도 조회 실패");
