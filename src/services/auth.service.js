@@ -1,5 +1,6 @@
 const authRepository = require("../repositories/auth.repository");
 const memberProfileRepository = require("../repositories/memberProfile.repository");
+const signupLimitService = require("./signupLimit.service");
 
 const { getConnection } = require("../config/db");
 const { createError } = require("../utils/error.util");
@@ -12,7 +13,7 @@ const socialAccountRepository =
 /**
  * 회원가입
  */
-async function signup(member) {
+async function signup(member, { clientIp } = {}) {
 
     let conn;
 
@@ -55,8 +56,12 @@ async function signup(member) {
 
         if (existEmail.length > 0) { throw createError("이미 사용중인 이메일입니다.", 409); }
 
+        // 4-1. 같은 IP 가입 수 제한 (체험 계정 무한 생성 방지)
+        const signupIpHash = signupLimitService.hashIp(clientIp);
+        await signupLimitService.assertCanSignup({ member, ipHash: signupIpHash }, conn);
+
         // 5. 회원 저장
-        const memberId = await authRepository.signup(member, conn);
+        const memberId = await authRepository.signup({ ...member, signupIpHash }, conn);
         // 5-1. 회원 프로필 저장
         await memberProfileRepository.create( memberId, member, conn );
 

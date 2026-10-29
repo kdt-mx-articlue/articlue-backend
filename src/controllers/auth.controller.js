@@ -1,4 +1,5 @@
 const authService = require("../services/auth.service");
+const { getClientIp } = require("../services/signupLimit.service");
 
 /**
  * 회원가입
@@ -6,7 +7,7 @@ const authService = require("../services/auth.service");
 async function signup(req, res) {
 
     try {
-        const result = await authService.signup(req.body);
+        const result = await authService.signup(req.body, { clientIp: getClientIp(req) });
 
         return res.status(201).json({
             success: true,

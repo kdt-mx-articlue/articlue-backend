@@ -13,6 +13,7 @@ async function signup(member, conn) {
             EMAIL,
             NICKNAME,
             USER_TYPE,
+            SIGNUP_IP_HASH,
             CREATE_AT,
             UPDATE_AT
         )
@@ -23,6 +24,7 @@ async function signup(member, conn) {
             :email,
             :nickname,
             'COMMON',
+            :signupIpHash,
             SYSDATE,
             SYSDATE
         )
@@ -35,6 +37,7 @@ async function signup(member, conn) {
             password: member.password,
             email: member.email,
             nickname: member.nickname,
+            signupIpHash: member.signupIpHash || null,
 
             memberId: {
                 dir: oracledb.BIND_OUT,
